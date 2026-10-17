@@ -1,10 +1,83 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve, relative, isAbsolute } from 'node:path';
 import { loadPack, DEFAULT_CORE_DIR } from './pack.mjs';
 import { TARGETS } from './targets.mjs';
 
 export const BLOCK_START = '<!-- ai-dev-team:start -->';
 export const BLOCK_END = '<!-- ai-dev-team:end -->';
+
+export const TARGET_DIRS = {
+  antigravity: '.agents',
+  'claude-code': '.claude',
+  cursor: '.cursor',
+};
+
+const GITIGNORE_ENTRY = '.ai-team/**/events.jsonl';
+
+/**
+ * Detects which target tool directories (.agents, .claude, .cursor) already exist in `dir`.
+ * Returns detected target names in canonical order, or all targets if none exist.
+ */
+export async function detectTargets(dir = '.') {
+  const root = resolve(dir);
+  const found = [];
+  for (const [target, folder] of Object.entries(TARGET_DIRS)) {
+    try {
+      const s = await stat(resolve(root, folder));
+      if (s.isDirectory()) found.push(target);
+    } catch {
+      // Directory does not exist
+    }
+  }
+  return found.length > 0 ? found : Object.keys(TARGETS);
+}
+
+/**
+ * Initializes a project by installing into detected (or specified) targets and scaffolding
+ * `.ai-team/.gitkeep` and `.gitignore`.
+ */
+export async function initProject({
+  targets,
+  dir = '.',
+  force = false,
+  dryRun = false,
+  coreDir = DEFAULT_CORE_DIR,
+} = {}) {
+  const resolvedTargets = targets?.length ? targets : await detectTargets(dir);
+  const results = {};
+  for (const target of resolvedTargets) {
+    results[target] = await install({ target, dir, force, dryRun, coreDir });
+  }
+
+  const root = resolve(dir);
+  const workspace = { written: [], updated: [], skipped: [] };
+
+  const gitkeepAbs = resolve(root, '.ai-team/.gitkeep');
+  const existingGitkeep = await readOptional(gitkeepAbs);
+  if (existingGitkeep === null) {
+    workspace.written.push('.ai-team/.gitkeep');
+    if (!dryRun) await writeFileEnsured(gitkeepAbs, '');
+  } else {
+    workspace.skipped.push('.ai-team/.gitkeep');
+  }
+
+  const gitignoreAbs = resolve(root, '.gitignore');
+  const existingGitignore = await readOptional(gitignoreAbs);
+  if (existingGitignore === null) {
+    workspace.written.push('.gitignore');
+    if (!dryRun) await writeFileEnsured(gitignoreAbs, `${GITIGNORE_ENTRY}\n`);
+  } else if (existingGitignore.split(/\r?\n/).some((line) => line.trim() === GITIGNORE_ENTRY)) {
+    workspace.skipped.push('.gitignore');
+  } else {
+    workspace.updated.push('.gitignore');
+    const prefix = existingGitignore.length > 0 && !existingGitignore.endsWith('\n')
+      ? `${existingGitignore}\n`
+      : existingGitignore;
+    if (!dryRun) await writeFileEnsured(gitignoreAbs, `${prefix}${GITIGNORE_ENTRY}\n`);
+  }
+
+  return { targets: resolvedTargets, results, workspace };
+}
 
 /**
  * Installs the pack into a project. Existing standalone files are skipped unless `force`

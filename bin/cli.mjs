@@ -1,21 +1,23 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { install, uninstall } from '../src/install.mjs';
+import { install, uninstall, initProject } from '../src/install.mjs';
 import { TARGETS } from '../src/targets.mjs';
 import { appendEvent, AGENTS, EVENT_TYPES } from '../src/events.mjs';
 
 const USAGE = `Usage:
-  ai-dev-team install --target <${Object.keys(TARGETS).join('|')}> [--dir <path>] [--force] [--dry-run]
-  ai-dev-team uninstall --target <${Object.keys(TARGETS).join('|')}> [--dir <path>] [--dry-run]
+  ai-dev-team init [--target <${Object.keys(TARGETS).join('|')}>] [--all] [--dir <path>] [--force] [--dry-run]
+  ai-dev-team install --target <${Object.keys(TARGETS).join('|')}> [--all] [--dir <path>] [--force] [--dry-run]
+  ai-dev-team uninstall --target <${Object.keys(TARGETS).join('|')}> [--all] [--dir <path>] [--dry-run]
   ai-dev-team event --work-id <id> --agent <role> --event <type> [--stage <s>] [--message <text>]
                     [--verdict <v>] [--loop <n>] [--to <role>] [--dir <path>]
   ai-dev-team status [--work-id <id>] [--dir <path>]
   ai-dev-team dashboard [--dir <path>] [--port <n>] [--no-open] [--demo]
 
-Install / Uninstall options:
+Init / Install / Uninstall options:
   -t, --target   Tool to install/uninstall for (repeatable)
-  -f, --force    Overwrite existing generated files (install only)
+  -a, --all      Target all supported tools (${Object.keys(TARGETS).join(', ')})
+  -f, --force    Overwrite existing generated files (init/install only)
       --dry-run  Show what would change without writing
 
 Event options (append one status event to .ai-team/<work-id>/events.jsonl):
@@ -36,6 +38,7 @@ Common:
 
 const OPTIONS = {
   target: { type: 'string', short: 't', multiple: true },
+  all: { type: 'boolean', short: 'a', default: false },
   dir: { type: 'string', short: 'd', default: '.' },
   force: { type: 'boolean', short: 'f', default: false },
   'dry-run': { type: 'boolean', default: false },
@@ -53,7 +56,7 @@ const OPTIONS = {
   demo: { type: 'boolean', default: false },
 };
 
-const COMMANDS = ['install', 'uninstall', 'event', 'status', 'dashboard'];
+const COMMANDS = ['init', 'install', 'uninstall', 'event', 'status', 'dashboard'];
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: OPTIONS });
@@ -63,6 +66,7 @@ async function main() {
     console.log(USAGE);
     process.exit(values.help ? 0 : 1);
   }
+  if (command === 'init') return runInit(values);
   if (command === 'install') return runInstall(values);
   if (command === 'uninstall') return runUninstall(values);
   if (command === 'event') return runEvent(values);
@@ -70,12 +74,34 @@ async function main() {
   return runDashboard(values);
 }
 
+async function runInit(values) {
+  const targets = values.all ? Object.keys(TARGETS) : values.target;
+  const { targets: installedTargets, results, workspace } = await initProject({
+    targets,
+    dir: values.dir,
+    force: values.force,
+    dryRun: values['dry-run'],
+  });
+  for (const target of installedTargets) {
+    const report = results[target];
+    console.log(`\n[${target}]${values['dry-run'] ? ' (dry run)' : ''}`);
+    for (const p of report.written) console.log(`  + ${p}`);
+    for (const p of report.updated) console.log(`  ~ ${p}`);
+    for (const p of report.skipped) console.log(`  = ${p} (exists, use --force to overwrite)`);
+  }
+  console.log(`\n[workspace]${values['dry-run'] ? ' (dry run)' : ''}`);
+  for (const p of workspace.written) console.log(`  + ${p}`);
+  for (const p of workspace.updated) console.log(`  ~ ${p}`);
+  for (const p of workspace.skipped) console.log(`  = ${p}`);
+}
+
 async function runInstall(values) {
-  if (!values.target?.length) {
+  const targets = values.all ? Object.keys(TARGETS) : values.target;
+  if (!targets?.length) {
     console.log(USAGE);
     process.exit(1);
   }
-  for (const target of values.target) {
+  for (const target of targets) {
     const report = await install({ target, dir: values.dir, force: values.force, dryRun: values['dry-run'] });
     console.log(`\n[${target}]${values['dry-run'] ? ' (dry run)' : ''}`);
     for (const p of report.written) console.log(`  + ${p}`);
@@ -85,11 +111,12 @@ async function runInstall(values) {
 }
 
 async function runUninstall(values) {
-  if (!values.target?.length) {
+  const targets = values.all ? Object.keys(TARGETS) : values.target;
+  if (!targets?.length) {
     console.log(USAGE);
     process.exit(1);
   }
-  for (const target of values.target) {
+  for (const target of targets) {
     const report = await uninstall({ target, dir: values.dir, dryRun: values['dry-run'] });
     console.log(`\n[${target}]${values['dry-run'] ? ' (dry run)' : ''}`);
     for (const p of report.removed) console.log(`  - ${p}`);

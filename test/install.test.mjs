@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { install, uninstall, upsertBlock, removeBlock, BLOCK_START } from '../src/install.mjs';
+import { install, uninstall, initProject, detectTargets, TARGET_DIRS, upsertBlock, removeBlock, BLOCK_START } from '../src/install.mjs';
 import { loadPack } from '../src/pack.mjs';
 import { parseFrontmatter, serializeFrontmatter } from '../src/frontmatter.mjs';
 
@@ -198,3 +198,56 @@ test('unknown target is rejected', async () => {
   await assert.rejects(install({ target: 'vim', dir: '.' }), /Unknown target/);
   await assert.rejects(uninstall({ target: 'vim', dir: '.' }), /Unknown target/);
 });
+
+test('detectTargets returns existing tool directories or all targets when none exist', async () => {
+  assert.deepEqual(TARGET_DIRS, {
+    antigravity: '.agents',
+    'claude-code': '.claude',
+    cursor: '.cursor',
+  });
+  await withTempDir(async (dir) => {
+    assert.deepEqual(await detectTargets(dir), ['antigravity', 'claude-code', 'cursor']);
+    await mkdir(join(dir, '.claude'));
+    assert.deepEqual(await detectTargets(dir), ['claude-code']);
+    await mkdir(join(dir, '.agents'));
+    assert.deepEqual(await detectTargets(dir), ['antigravity', 'claude-code']);
+  });
+});
+
+test('initProject installs detected targets and scaffolds .ai-team/.gitkeep and .gitignore idempotently', async () => {
+  await withTempDir(async (dir) => {
+    await mkdir(join(dir, '.claude'));
+    await writeFile(join(dir, '.gitignore'), 'node_modules/\n', 'utf8');
+
+    const first = await initProject({ dir });
+    assert.deepEqual(first.targets, ['claude-code']);
+    assert.ok(first.results['claude-code'].written.length > 0);
+    assert.equal(await exists(join(dir, '.agents')), false);
+    assert.deepEqual(first.workspace.written, ['.ai-team/.gitkeep']);
+    assert.deepEqual(first.workspace.updated, ['.gitignore']);
+    assert.equal(await exists(join(dir, '.ai-team/.gitkeep')), true);
+
+    const gitignoreContent = await readFile(join(dir, '.gitignore'), 'utf8');
+    assert.equal(gitignoreContent, 'node_modules/\n.ai-team/**/events.jsonl\n');
+
+    const second = await initProject({ dir });
+    assert.deepEqual(second.workspace.written, []);
+    assert.deepEqual(second.workspace.updated, []);
+    assert.deepEqual(second.workspace.skipped, ['.ai-team/.gitkeep', '.gitignore']);
+    assert.equal(await readFile(join(dir, '.gitignore'), 'utf8'), gitignoreContent);
+  });
+});
+
+test('initProject with explicit targets installs all specified targets and creates .gitignore when missing', async () => {
+  await withTempDir(async (dir) => {
+    const allTargets = ['antigravity', 'claude-code', 'cursor'];
+    const res = await initProject({ targets: allTargets, dir });
+    assert.deepEqual(res.targets, allTargets);
+    for (const t of allTargets) {
+      assert.ok(res.results[t].written.length > 0);
+    }
+    assert.deepEqual(res.workspace.written, ['.ai-team/.gitkeep', '.gitignore']);
+    assert.equal(await readFile(join(dir, '.gitignore'), 'utf8'), '.ai-team/**/events.jsonl\n');
+  });
+});
+

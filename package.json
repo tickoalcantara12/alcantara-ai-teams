@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Technology-agnostic AI development team (Architect, Implementer, Reviewer, Security Pentester, QA) for Antigravity, Claude Code and Cursor.",
   "type": "module",
-  "bin": { "ai-dev-team": "bin/cli.mjs" },
+  "bin": {
+    "ai-dev-team": "bin/cli.mjs",
+    "alcantara-ai-teams": "bin/cli.mjs"
+  },
   "files": ["bin", "src", "core", "schema", "dashboard"],
   "engines": { "node": ">=18.3" },
   "scripts": {
@@ -13,5 +16,17 @@
     "type": "git",
     "url": "https://github.com/tickoalcantara12/alcantara-ai-teams.git"
   },
+  "homepage": "https://github.com/tickoalcantara12/alcantara-ai-teams#readme",
+  "bugs": {
+    "url": "https://github.com/tickoalcantara12/alcantara-ai-teams/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "antigravity",
+    "claude-code",
+    "cursor",
+    "spec-driven-development",
+    "ai-dev-team"
+  ],
   "license": "MIT"
 }

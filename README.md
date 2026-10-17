@@ -18,24 +18,43 @@ It is a set of Markdown instructions (roles, skills, commands, templates) plus a
 - Optional: `gh` (GitHub) or `glab` (GitLab) for the PR commands.
 
 ## Install
-The installer copies the team into **your project**. Run it once per project and per tool.
+The installer copies the team into **your project**.
 
-**Not on npm yet?** Point `npx` at this folder (replace the path with where you keep it):
+**Direct from GitHub (one-command setup):**
 ```bash
 cd /path/to/your-project
-npx /path/to/ai-dev-team install --target claude-code
+npx github:tickoalcantara12/alcantara-ai-teams init
 ```
-Without `npx`, `node /path/to/ai-dev-team/bin/cli.mjs install --target claude-code` does the same.
+`init` automatically:
+- Detects existing `.agents/`, `.claude/`, or `.cursor/` directories (or installs all three if none exist yet)
+- Creates `.ai-team/.gitkeep` for team specs, plans, and task tracking
+- Adds `.ai-team/**/events.jsonl` to `.gitignore`
+
+Or target specific tools directly from GitHub:
+```bash
+npx github:tickoalcantara12/alcantara-ai-teams install -t antigravity
+npx github:tickoalcantara12/alcantara-ai-teams install --all
+```
+
+**From a local clone of this folder:**
+```bash
+cd /path/to/your-project
+npx /path/to/ai-dev-team init
+# or: node /path/to/ai-dev-team/bin/cli.mjs install --target claude-code
+```
 
 **Once published to npm:**
 ```bash
 cd /path/to/your-project
+npx ai-dev-team init
 npx ai-dev-team install --target claude-code      # or: antigravity | cursor
 ```
 
 Options:
 ```bash
+npx ai-dev-team init --all                           # initialize all tools + .ai-team/ workspace
 npx ai-dev-team install -t antigravity -t cursor     # several tools at once
+npx ai-dev-team install --all                        # all three tools (-a)
 npx ai-dev-team install -t claude-code --dir ../app  # install into another folder
 npx ai-dev-team install -t claude-code --dry-run     # preview, write nothing
 npx ai-dev-team install -t claude-code --force       # overwrite files that already exist
