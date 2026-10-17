@@ -86,6 +86,9 @@ test('new-feature enforces both approval gates and spec/tasks artifacts', async 
   const spec = pack.commands.find((c) => c.data.name === 'spec');
   assert.ok(spec.body.includes('Gate 1'));
   assert.ok(!spec.body.includes('Gate 2'));
+  for (const principle of ['Think Before Coding', 'Simplicity First', 'Surgical Changes', 'Goal-Driven Execution']) {
+    assert.ok(pack.rules.includes(principle), `core/rules.md missing "${principle}"`);
+  }
 });
 
 test('antigravity install writes role skills with inlined procedures, rules, workflows and AGENTS block', async () => {

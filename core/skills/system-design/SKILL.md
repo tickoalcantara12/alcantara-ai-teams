@@ -14,13 +14,13 @@ If `.ai-team/constitution.md` does not exist, draft it from the constitution tem
 2. Restate the problem, users and goal. Write prioritized user stories (P1 first), each independently testable.
 3. Write requirements in **EARS** form with stable IDs (`REQ-n`, `NFR-n`). One testable behavior each. Cover edge cases and failure modes; each must map to a requirement.
 4. List out-of-scope items and assumptions.
-5. **Clarify.** Mark every unknown inline as `[NEEDS CLARIFICATION: question]`, list them in Open Questions, and ask the user concise multiple-choice questions. Do not guess business rules. Update the spec with the answers and remove the markers.
+5. **Clarify (Think Before Coding).** Mark every unknown inline as `[NEEDS CLARIFICATION: question]`, list them in Open Questions, surface assumptions and multiple interpretations explicitly, push back when a simpler approach exists, and ask the user concise multiple-choice questions. Do not guess business rules. Update the spec with the answers and remove the markers.
 6. **Spec gate:** no markers remain, every requirement is testable, no implementation detail leaked in. Then get user approval (Gate 1).
 
 ## Phase 2 – Design (`design.md`) — *how*
 1. Complete the constitution check; justify any deviation or change the design.
 2. Map the existing system: modules, entry points, data models, APIs, utilities to reuse (cite paths).
-3. For each significant decision, compare 2–3 options and record an ADR.
+3. **Simplicity First:** Choose the simplest design that satisfies the spec. Avoid single-use abstractions, speculative configurability, or error handling for impossible scenarios. For each significant decision, compare 2–3 options and record an ADR.
 4. Describe components, data flow, API/schema changes, error handling, migration and rollback.
 5. Fill the requirement coverage table: every requirement is addressed by the design.
 6. Assess impact: compatibility, performance, security surface, data.

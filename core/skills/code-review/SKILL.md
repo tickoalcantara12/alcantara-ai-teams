@@ -9,9 +9,9 @@ description: Step-by-step procedure for the Principal Engineering Team Lead to r
 2. **Verify claims** – Run lint, type check, build and tests. Note any mismatch with the implementer's notes.
 3. **Review dimensions**
    - Correctness: every requirement the task claims is actually met, edge cases, error paths, concurrency.
-   - Spec conformance: no behavior beyond the spec (gold-plating); tests trace to requirement IDs; constitution principles respected.
+   - Spec conformance & Surgical diff: every changed line traces to a requirement ID; no gold-plating, no orthogonal edits to adjacent code/comments/formatting, and no newly orphaned imports/variables left behind.
    - Design conformance: matches design/ADRs; layering and separation of concerns.
-   - Maintainability: naming, function size, duplication, unnecessary abstraction, dead code.
+   - Simplicity & Maintainability: minimum code that solves the problem ("if 200 lines could be 50, simplify"), no single-use abstractions or speculative configurability, clear naming, no duplication or dead code.
    - Performance: unnecessary queries/loops, N+1, missing indexes, unbounded memory.
    - API/data: backward compatibility, validation, status codes, migration safety.
    - Tests: meaningful assertions, coverage of new logic, no weakened tests.

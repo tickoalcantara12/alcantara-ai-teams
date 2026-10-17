@@ -12,6 +12,8 @@ A five-role AI development team you install into any project. It works with any 
 
 It is a set of Markdown instructions (roles, skills, commands, templates) plus a small Node installer. Your AI coding tool's own model does the work, so there is nothing to host and no API key to configure.
 
+Built-in engineering rules merge and deduplicate the **Karpathy Coding Guidelines** (*Think Before Coding*, *Simplicity First*, *Surgical Changes*, *Goal-Driven Execution*) directly into the shared rules and role checklists (`architect`, `implementer`, `reviewer`).
+
 ## Requirements
 - Node.js 18.3 or newer (only needed to install and to run the `event` and `dashboard` commands).
 - One of: Antigravity, Claude Code or Cursor, opened on the project you want the team to work on.
