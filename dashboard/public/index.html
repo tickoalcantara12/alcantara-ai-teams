@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Dev Team Office · Live agent dashboard</title>
+  <meta name="description" content="Live, read-only office view of the AI dev team: Architect, Implementer, Reviewer, Security Pentester and QA.">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>AI Dev Team Office</h1>
+    <label class="work-picker" for="work-select">
+      <span>Work item</span>
+      <select id="work-select" disabled>
+        <option>Loading…</option>
+      </select>
+    </label>
+    <p id="connection" class="connection" data-state="connecting" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span><span id="connection-text">Connecting</span>
+    </p>
+  </header>
+
+  <main class="layout">
+    <section class="office" aria-label="Office">
+      <div id="stage" class="stage">
+        <canvas id="office-canvas" width="384" height="216" role="img" aria-label="Office with five agents"></canvas>
+        <div id="tags" class="tags"></div>
+        <div id="empty" class="empty" hidden>
+          <h2>No work items yet</h2>
+          <p>Run <code>/spec</code> or <code>/new-feature</code> in your AI tool. Agents report their status to
+            <code>.ai-team/&lt;work-id&gt;/events.jsonl</code> and they will appear here.</p>
+          <p>Just exploring? Start with <code>npx ai-dev-team dashboard --demo</code>.</p>
+        </div>
+      </div>
+      <p id="work-summary" class="work-summary" aria-live="polite"></p>
+    </section>
+
+    <aside id="panel" class="panel" aria-labelledby="panel-name" aria-live="polite">
+      <p class="panel-eyebrow" id="panel-title">Architecture Specialist</p>
+      <h2 id="panel-name" class="panel-name">Architect</h2>
+      <p><span id="panel-status" class="badge" data-status="idle">Idle</span></p>
+      <p id="panel-alert" class="panel-alert" hidden></p>
+      <dl class="facts">
+        <div><dt>Stage</dt><dd id="panel-stage">—</dd></div>
+        <div><dt>Current task</dt><dd id="panel-task">—</dd></div>
+        <div><dt>Loop count</dt><dd id="panel-loop">—</dd></div>
+        <div><dt>Latest verdict</dt><dd id="panel-verdict">—</dd></div>
+        <div><dt>Last update</dt><dd id="panel-updated">—</dd></div>
+      </dl>
+      <p class="panel-hint">Click a desk or use ← → to switch.</p>
+      <section class="activity" aria-labelledby="activity-heading">
+        <h3 id="activity-heading" class="activity-heading">Recent activity</h3>
+        <ol id="activity-list" class="activity-list">
+          <li class="activity-empty">No events yet.</li>
+        </ol>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">Read-only · served on 127.0.0.1 · status is reported by the agents themselves</footer>
+</body>
+</html>
