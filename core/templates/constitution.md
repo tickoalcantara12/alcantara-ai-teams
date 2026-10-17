@@ -1,8 +1,13 @@
 # Project Constitution
 
-Non-negotiable principles for this project. Every spec, design and task is checked against this file. Changing a principle needs explicit user approval and a version bump.
+Non-negotiable principles and context for this project. Every spec, design and task is checked against this file. Changing a principle needs explicit user approval and a version bump.
 
 - **Version:** 1.0 · **Last amended:** <date>
+
+## Project Overview
+- **Project:** <project name and summary>
+- **Technology Stack:** <languages, frameworks, database, infrastructure>
+- **MCP Servers & Integrations:** <e.g. github, jira, gitlab, linear, postgres, sentry, or none>
 
 ## Principles
 Draft defaults — adjust for this project. Each principle should be testable.
@@ -17,6 +22,7 @@ Draft defaults — adjust for this project. Each principle should be testable.
 
 ## Project-specific principles
 <!-- e.g. accessibility level, supported platforms, performance budgets, compliance rules, code ownership -->
+- <project-specific requirements or constraints>
 
 ## Quality gates
 - Build: `<command>`

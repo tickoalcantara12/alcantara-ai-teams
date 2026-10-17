@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { install, uninstall, initProject } from '../src/install.mjs';
+import { createInterface } from 'node:readline/promises';
+import {
+  install,
+  uninstall,
+  initProject,
+  detectTargets,
+  detectProjectInfo,
+  parseTargetSelection,
+} from '../src/install.mjs';
 import { TARGETS } from '../src/targets.mjs';
 import { appendEvent, AGENTS, EVENT_TYPES } from '../src/events.mjs';
 
 const USAGE = `Usage:
-  ai-dev-team init [--target <${Object.keys(TARGETS).join('|')}>] [--all] [--dir <path>] [--force] [--dry-run]
+  ai-dev-team init [--target <${Object.keys(TARGETS).join('|')}>] [--all] [--yes] [--dir <path>] [--force] [--dry-run]
   ai-dev-team install --target <${Object.keys(TARGETS).join('|')}> [--all] [--dir <path>] [--force] [--dry-run]
   ai-dev-team uninstall --target <${Object.keys(TARGETS).join('|')}> [--all] [--dir <path>] [--dry-run]
   ai-dev-team event --work-id <id> --agent <role> --event <type> [--stage <s>] [--message <text>]
@@ -15,10 +23,15 @@ const USAGE = `Usage:
   ai-dev-team dashboard [--dir <path>] [--port <n>] [--no-open] [--demo]
 
 Init / Install / Uninstall options:
-  -t, --target   Tool to install/uninstall for (repeatable)
-  -a, --all      Target all supported tools (${Object.keys(TARGETS).join(', ')})
-  -f, --force    Overwrite existing generated files (init/install only)
-      --dry-run  Show what would change without writing
+  -t, --target        Tool to install/uninstall for (repeatable)
+  -a, --all           Target all supported tools (${Object.keys(TARGETS).join(', ')})
+  -y, --yes           Skip interactive prompts during init and use detected defaults
+      --project       Project name & summary for .ai-team/constitution.md (init only)
+      --stack         Technology stack for .ai-team/constitution.md (init only)
+      --mcp           MCP servers / integrations (e.g. github, jira, postgres) (init only)
+      --requirements  Additional project requirements / constraints (init only)
+  -f, --force         Overwrite existing generated files (init/install only)
+      --dry-run       Show what would change without writing
 
 Event options (append one status event to .ai-team/<work-id>/events.jsonl):
       --agent    ${AGENTS.join(' | ')}
@@ -39,6 +52,11 @@ Common:
 const OPTIONS = {
   target: { type: 'string', short: 't', multiple: true },
   all: { type: 'boolean', short: 'a', default: false },
+  yes: { type: 'boolean', short: 'y', default: false },
+  project: { type: 'string' },
+  stack: { type: 'string' },
+  mcp: { type: 'string' },
+  requirements: { type: 'string' },
   dir: { type: 'string', short: 'd', default: '.' },
   force: { type: 'boolean', short: 'f', default: false },
   'dry-run': { type: 'boolean', default: false },
@@ -74,13 +92,89 @@ async function main() {
   return runDashboard(values);
 }
 
+async function promptWithDefault(rl, question, defaultValue) {
+  const suffix = defaultValue ? ` [${defaultValue}]` : '';
+  const ans = (await rl.question(`? ${question}${suffix}: `)).trim();
+  return ans || defaultValue;
+}
+
 async function runInit(values) {
-  const targets = values.all ? Object.keys(TARGETS) : values.target;
+  const defaults = await detectProjectInfo(values.dir);
+  const detectedTargets = await detectTargets(values.dir);
+  let targets = values.all ? Object.keys(TARGETS) : values.target;
+  let projectInfo = {
+    project: values.project ?? defaults.project,
+    techStack: values.stack ?? defaults.techStack,
+    mcpServers: values.mcp ?? defaults.mcpServers,
+    requirements: values.requirements ?? defaults.requirements,
+    buildCmd: defaults.buildCmd,
+    lintCmd: defaults.lintCmd,
+    testCmd: defaults.testCmd,
+  };
+
+  if (process.stdin.isTTY && !values.yes) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      console.log('\n--- AI Dev Team: Project Initialization ---');
+      if (!targets?.length) {
+        console.log('Which AI coding tool(s) will you use in this project?');
+        console.log('  1) Antigravity (.agents)');
+        console.log('  2) Claude Code (.claude + CLAUDE.md)');
+        console.log('  3) Cursor (.cursor)');
+        console.log('  4) All of the above');
+        const targetAns = await promptWithDefault(
+          rl,
+          'Select tool(s) (1-4 or comma-separated)',
+          detectedTargets.join(', '),
+        );
+        targets = parseTargetSelection(targetAns, detectedTargets);
+      }
+      projectInfo.project = await promptWithDefault(
+        rl,
+        'Project name & summary',
+        projectInfo.project,
+      );
+      projectInfo.techStack = await promptWithDefault(
+        rl,
+        'Technology stack (languages, frameworks, database)',
+        projectInfo.techStack,
+      );
+      projectInfo.mcpServers = await promptWithDefault(
+        rl,
+        'MCP servers / integrations (e.g. github, jira, gitlab, linear, postgres, sentry, none)',
+        projectInfo.mcpServers,
+      );
+      projectInfo.requirements = await promptWithDefault(
+        rl,
+        'Other project requirements / constraints (e.g. auth, compliance, performance)',
+        projectInfo.requirements,
+      );
+      projectInfo.buildCmd = await promptWithDefault(
+        rl,
+        'Build command',
+        projectInfo.buildCmd,
+      );
+      projectInfo.lintCmd = await promptWithDefault(
+        rl,
+        'Lint / typecheck command',
+        projectInfo.lintCmd,
+      );
+      projectInfo.testCmd = await promptWithDefault(
+        rl,
+        'Test command',
+        projectInfo.testCmd,
+      );
+    } finally {
+      rl.close();
+    }
+  }
+
   const { targets: installedTargets, results, workspace } = await initProject({
     targets,
     dir: values.dir,
     force: values.force,
     dryRun: values['dry-run'],
+    projectInfo,
   });
   for (const target of installedTargets) {
     const report = results[target];

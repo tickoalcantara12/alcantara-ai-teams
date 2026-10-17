@@ -3,7 +3,19 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { install, uninstall, initProject, detectTargets, TARGET_DIRS, upsertBlock, removeBlock, BLOCK_START } from '../src/install.mjs';
+import {
+  install,
+  uninstall,
+  initProject,
+  detectTargets,
+  detectProjectInfo,
+  parseTargetSelection,
+  renderConstitution,
+  TARGET_DIRS,
+  upsertBlock,
+  removeBlock,
+  BLOCK_START,
+} from '../src/install.mjs';
 import { loadPack } from '../src/pack.mjs';
 import { parseFrontmatter, serializeFrontmatter } from '../src/frontmatter.mjs';
 
@@ -253,4 +265,58 @@ test('initProject with explicit targets installs all specified targets and creat
     assert.equal(await readFile(join(dir, '.gitignore'), 'utf8'), '.ai-team/**/events.jsonl\n');
   });
 });
+
+test('parseTargetSelection parses numeric, named, and all selections', () => {
+  assert.deepEqual(parseTargetSelection('', ['claude-code']), ['claude-code']);
+  assert.deepEqual(parseTargetSelection('1, 3'), ['antigravity', 'cursor']);
+  assert.deepEqual(parseTargetSelection('2'), ['claude-code']);
+  assert.deepEqual(parseTargetSelection('4'), ['antigravity', 'claude-code', 'cursor']);
+  assert.deepEqual(parseTargetSelection('all'), ['antigravity', 'claude-code', 'cursor']);
+  assert.deepEqual(parseTargetSelection('cursor, antigravity'), ['cursor', 'antigravity']);
+  assert.throws(() => parseTargetSelection('9'), /Invalid target selection/);
+});
+
+test('detectProjectInfo and initProject scaffold .ai-team/constitution.md with project, stack, MCP and requirements', async () => {
+  await withTempDir(async (dir) => {
+    await writeFile(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'billing-service',
+        description: 'Stripe & invoice API',
+        dependencies: { express: '^4.18.0', prisma: '^5.0.0' },
+        devDependencies: { typescript: '^5.0.0' },
+        scripts: { build: 'tsc', lint: 'eslint .', test: 'vitest run' },
+      }),
+      'utf8',
+    );
+    const detected = await detectProjectInfo(dir);
+    assert.equal(detected.project, 'billing-service — Stripe & invoice API');
+    assert.ok(detected.techStack.includes('Node.js'));
+    assert.ok(detected.techStack.includes('TypeScript'));
+    assert.ok(detected.techStack.includes('express'));
+    assert.equal(detected.buildCmd, 'npm run build');
+    assert.equal(detected.lintCmd, 'npm run lint');
+    assert.equal(detected.testCmd, 'npm test');
+
+    const customInfo = {
+      ...detected,
+      mcpServers: 'github, jira, postgres, sentry',
+      requirements: 'PCI-DSS compliance; idempotent webhook handlers',
+    };
+    const res = await initProject({ targets: ['antigravity'], dir, projectInfo: customInfo });
+    assert.ok(res.workspace.written.includes('.ai-team/constitution.md'));
+
+    const constitution = await readFile(join(dir, '.ai-team/constitution.md'), 'utf8');
+    assert.ok(constitution.includes('billing-service — Stripe & invoice API'));
+    assert.ok(constitution.includes('github, jira, postgres, sentry'));
+    assert.ok(constitution.includes('- PCI-DSS compliance'));
+    assert.ok(constitution.includes('- idempotent webhook handlers'));
+    assert.ok(constitution.includes('Build: `npm run build`'));
+
+    // Second run without force skips existing constitution.md
+    const second = await initProject({ targets: ['antigravity'], dir, projectInfo: customInfo });
+    assert.ok(second.workspace.skipped.includes('.ai-team/constitution.md'));
+  });
+});
+
 

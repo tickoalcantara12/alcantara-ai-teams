@@ -22,17 +22,31 @@ Built-in engineering rules merge and deduplicate the **Karpathy Coding Guideline
 ## Install
 The installer copies the team into **your project**.
 
-**Direct from GitHub (one-command setup):**
+**Direct from GitHub (interactive one-command setup):**
 ```bash
 cd /path/to/your-project
 npx github:tickoalcantara12/alcantara-ai-teams init
 ```
-`init` automatically:
-- Detects existing `.agents/`, `.claude/`, or `.cursor/` directories (or installs all three if none exist yet)
-- Creates `.ai-team/.gitkeep` for team specs, plans, and task tracking
-- Adds `.ai-team/**/events.jsonl` to `.gitignore`
+When run in an interactive terminal, `init` inspects your repository (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.) to suggest smart defaults and walks you through a quick setup wizard:
+1. **AI coding tool(s)**: `1) Antigravity (.agents)`, `2) Claude Code (.claude)`, `3) Cursor (.cursor)`, or `4) All`
+2. **Project name & summary**
+3. **Technology stack** (languages, frameworks, database)
+4. **MCP servers / integrations** (e.g. `github`, `jira`, `gitlab`, `linear`, `postgres`, `sentry`)
+5. **Additional project requirements / constraints** (e.g. auth, compliance, performance, architecture rules)
+6. **Quality gate commands** (`Build`, `Lint / typecheck`, `Test`)
 
-Or target specific tools directly from GitHub:
+It then:
+- Installs the 5 roles, skills, workflows/commands, and local event runner for your chosen tool(s)
+- Generates `.ai-team/constitution.md` pre-populated with your project's stack, MCP integrations, quality gates, and requirements so all 5 agents have full context immediately
+- Creates `.ai-team/.gitkeep` and adds `.ai-team/**/events.jsonl` to `.gitignore`
+
+Skip prompts (use auto-detected defaults or flags) with `-y` / `--yes`:
+```bash
+npx github:tickoalcantara12/alcantara-ai-teams init --yes
+npx github:tickoalcantara12/alcantara-ai-teams init -y -t antigravity --mcp "github, jira, postgres" --requirements "Strict RBAC"
+```
+
+Or install only the tool files without workspace scaffolding:
 ```bash
 npx github:tickoalcantara12/alcantara-ai-teams install -t antigravity
 npx github:tickoalcantara12/alcantara-ai-teams install --all
@@ -54,7 +68,8 @@ npx ai-dev-team install --target claude-code      # or: antigravity | cursor
 
 Options:
 ```bash
-npx ai-dev-team init --all                           # initialize all tools + .ai-team/ workspace
+npx ai-dev-team init                                 # interactive wizard (tools + project + stack + MCP + constitution)
+npx ai-dev-team init --yes --all                     # non-interactive: all tools + auto-detected constitution
 npx ai-dev-team install -t antigravity -t cursor     # several tools at once
 npx ai-dev-team install --all                        # all three tools (-a)
 npx ai-dev-team install -t claude-code --dir ../app  # install into another folder
@@ -71,6 +86,7 @@ What gets created in your project:
 | Claude Code | `.claude/agents/<role>.md`, `.claude/skills/<skill>/SKILL.md`, `.claude/commands/<command>.md`, `CLAUDE.md`, `.claude/ai-team/` (including `event.mjs`) |
 | Antigravity | `.agents/rules/ai-dev-team.md`, `.agents/skills/<role or skill>/SKILL.md`, `.agents/workflows/<command>.md`, `.agents/AGENTS.md`, `.agents/ai-team/` (including `event.mjs`) |
 | Cursor | `.cursor/rules/ai-team-*.mdc`, `.cursor/commands/<command>.md`, `.cursor/ai-team/` (including `event.mjs`) |
+| Workspace (`init`) | `.ai-team/constitution.md` (project overview, tech stack, MCP servers, quality gates, rules), `.ai-team/.gitkeep`, `.gitignore` entry |
 
 After installing, restart or reload your tool if the new commands do not show up. Command and skill discovery depends on the tool and its version.
 
@@ -83,7 +99,7 @@ From your project's root directory, run:
 ```bash
 npx github:tickoalcantara12/alcantara-ai-teams init
 ```
-This detects your AI coding tool (`.agents`, `.claude`, or `.cursor`), installs the 5 roles, skills, workflows/commands, and local event runner, creates `.ai-team/`, and adds `.ai-team/**/events.jsonl` to `.gitignore`.
+Answer the interactive prompts (or press `Enter` to accept the auto-detected defaults for your AI coding tool, project summary, tech stack, MCP servers like `github`/`jira`/`postgres`, requirements, and build/lint/test commands). This installs the 5 roles, skills, workflows/commands, and writes `.ai-team/constitution.md`.
 
 ### 2. Run slash commands in your AI coding tool
 Open your project in **Antigravity**, **Claude Code**, or **Cursor**, and type a slash command in the agent chat:
