@@ -1,6 +1,6 @@
 {
   "name": "alcantara-ai-teams",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Technology-agnostic AI development team (Architect, Implementer, Reviewer, Security Pentester, QA) for Antigravity, Claude Code and Cursor.",
   "type": "module",
   "bin": {
