@@ -1,4 +1,4 @@
-# ai-dev-team
+# alcantara-ai-teams
 
 A five-role AI development team you install into any project. It works with any tech stack and any LLM, in **Antigravity**, **Claude Code** and **Cursor**.
 
@@ -22,9 +22,11 @@ Built-in engineering rules merge and deduplicate the **Karpathy Coding Guideline
 ## Install
 The installer copies the team into **your project**.
 
-**Direct from GitHub (interactive one-command setup):**
+**One-command interactive setup (via npm or GitHub):**
 ```bash
 cd /path/to/your-project
+npx alcantara-ai-teams init
+# or directly from GitHub:
 npx github:tickoalcantara12/alcantara-ai-teams init
 ```
 When run in an interactive terminal, `init` inspects your repository (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.) to suggest smart defaults and walks you through a quick setup wizard:
@@ -42,28 +44,15 @@ It then:
 
 Skip prompts (use auto-detected defaults or flags) with `-y` / `--yes`:
 ```bash
-npx github:tickoalcantara12/alcantara-ai-teams init --yes
-npx github:tickoalcantara12/alcantara-ai-teams init -y -t antigravity --mcp "github, jira, postgres" --requirements "Strict RBAC"
+npx alcantara-ai-teams init --yes
+npx alcantara-ai-teams init -y -t antigravity --mcp "github, jira, postgres" --requirements "Strict RBAC"
 ```
 
 Or install only the tool files without workspace scaffolding:
 ```bash
-npx github:tickoalcantara12/alcantara-ai-teams install -t antigravity
-npx github:tickoalcantara12/alcantara-ai-teams install --all
-```
-
-**From a local clone of this folder:**
-```bash
-cd /path/to/your-project
-npx /path/to/ai-dev-team init
-# or: node /path/to/ai-dev-team/bin/cli.mjs install --target claude-code
-```
-
-**Once published to npm (`alcantara-ai-teams`):**
-```bash
-cd /path/to/your-project
-npx alcantara-ai-teams init
-npx alcantara-ai-teams install --target claude-code      # or: antigravity | cursor
+npx alcantara-ai-teams install -t antigravity
+npx alcantara-ai-teams install -t claude-code -t cursor
+npx alcantara-ai-teams install --all
 ```
 
 Options:
@@ -97,7 +86,7 @@ After installing, restart or reload your tool if the new commands do not show up
 ### 1. Initialize in your project
 From your project's root directory, run:
 ```bash
-npx github:tickoalcantara12/alcantara-ai-teams init
+npx alcantara-ai-teams init
 ```
 Answer the interactive prompts (or press `Enter` to accept the auto-detected defaults for your AI coding tool, project summary, tech stack, MCP servers like `github`/`jira`/`postgres`, requirements, and build/lint/test commands). This installs the 5 roles, skills, workflows/commands, and writes `.ai-team/constitution.md`.
 
@@ -119,19 +108,19 @@ Open your project in **Antigravity**, **Claude Code**, or **Cursor**, and type a
 > - **Cursor**: Type `/new-feature ...` in Cursor Agent chat (from `.cursor/commands/`) or reference `@ai-team-role-architect`, `@ai-team-role-implementer`, etc.
 
 ### 3. CLI Reference
-You can run CLI commands via `npx github:tickoalcantara12/alcantara-ai-teams <cmd>` (or `npx ai-dev-team <cmd>` if linked/installed):
+You can run CLI commands via `npx alcantara-ai-teams <cmd>` (or `npx github:tickoalcantara12/alcantara-ai-teams <cmd>`):
 
 ```bash
-# Initialize project (auto-detects tools + scaffolds .ai-team/ & .gitignore)
-npx github:tickoalcantara12/alcantara-ai-teams init
+# Initialize project (interactive setup wizard + scaffolds .ai-team/ & .gitignore)
+npx alcantara-ai-teams init
 
 # Check active work items and role statuses in the terminal
-npx github:tickoalcantara12/alcantara-ai-teams status
-npx github:tickoalcantara12/alcantara-ai-teams status --work-id feat-todo-api
+npx alcantara-ai-teams status
+npx alcantara-ai-teams status --work-id feat-todo-api
 
 # Launch the live pixel-art office dashboard on http://127.0.0.1:3021
-npx github:tickoalcantara12/alcantara-ai-teams dashboard
-npx github:tickoalcantara12/alcantara-ai-teams dashboard --demo
+npx alcantara-ai-teams dashboard
+npx alcantara-ai-teams dashboard --demo
 ```
 
 ---
@@ -146,8 +135,8 @@ Suppose you want to add **JWT refresh token rotation** to an existing Node/Expre
 In your terminal:
 ```bash
 cd ~/projects/my-api
-npx github:tickoalcantara12/alcantara-ai-teams init
-npx github:tickoalcantara12/alcantara-ai-teams dashboard
+npx alcantara-ai-teams init
+npx alcantara-ai-teams dashboard
 ```
 
 #### Step 2 — Draft and approve the specification (**Gate 1**)
@@ -235,12 +224,12 @@ When a user reports a bug or a test is failing in production:
 While agents work (or when resuming a project later), inspect progress from your terminal:
 
 ```bash
-$ npx github:tickoalcantara12/alcantara-ai-teams status
+$ npx alcantara-ai-teams status
 
 Work items in .ai-team/:
   feat-jwt-refresh  stage: implement  active: implementer (working: "Task 3/5: token reuse detection")
 
-$ npx github:tickoalcantara12/alcantara-ai-teams status --work-id feat-jwt-refresh
+$ npx alcantara-ai-teams status --work-id feat-jwt-refresh
 
 Work item: feat-jwt-refresh
   architect    done     stage: tasks      task: "Gate 2 approved"
@@ -272,9 +261,9 @@ Suggestion: commit the specs and designs, and keep `.ai-team/**/events.jsonl` in
 Agents report what they are doing by appending events to `.ai-team/<work-id>/events.jsonl`. The installed rules tell them when to do it: start, handoff, waiting for you, verdict, fix loop, done.
 
 ```bash
-npx github:tickoalcantara12/alcantara-ai-teams dashboard        # your project, port 3021
-npx github:tickoalcantara12/alcantara-ai-teams dashboard --demo # scripted run, no agent needed
-npx ai-dev-team dashboard --dir ../app --port 5000 --no-open
+npx alcantara-ai-teams dashboard                        # your project, port 3021
+npx alcantara-ai-teams dashboard --demo                 # scripted run, no agent needed
+npx alcantara-ai-teams dashboard --dir ../app --port 5000 --no-open
 ```
 It is read-only and listens on `127.0.0.1` only. Press Ctrl+C to stop.
 
@@ -283,7 +272,7 @@ Event format: [schema/events.md](schema/events.md). Each target installation bun
 node .agents/ai-team/event.mjs --work-id feat-todo-api --agent reviewer --event verdict \
   --stage review --verdict CHANGES_REQUESTED --message "2 blocking findings"
 # or:
-npx ai-dev-team event --work-id feat-todo-api --agent reviewer --event verdict \
+npx alcantara-ai-teams event --work-id feat-todo-api --agent reviewer --event verdict \
   --stage review --verdict CHANGES_REQUESTED --message "2 blocking findings"
 ```
 
@@ -299,13 +288,13 @@ Edit the files in `core/`: `roles/`, `skills/`, `commands/`, `templates/`, `work
 ## Update and uninstall
 - **Update:** re-run `init` or `install` with `--force`:
   ```bash
-  npx github:tickoalcantara12/alcantara-ai-teams init --force
+  npx alcantara-ai-teams init --force
   ```
 - **Uninstall:** run the `uninstall` command to cleanly remove the installed files and the managed `ai-dev-team` block in `CLAUDE.md` or `.agents/AGENTS.md`:
   ```bash
-  npx github:tickoalcantara12/alcantara-ai-teams uninstall --all
-  npx ai-dev-team uninstall --target claude-code      # or: antigravity | cursor
-  npx ai-dev-team uninstall -t claude-code --dry-run  # preview what would be removed
+  npx alcantara-ai-teams uninstall --all
+  npx alcantara-ai-teams uninstall --target claude-code      # or: antigravity | cursor
+  npx alcantara-ai-teams uninstall -t claude-code --dry-run  # preview what would be removed
   ```
   Your `.ai-team/` work artifacts are preserved for you to keep or delete.
 
