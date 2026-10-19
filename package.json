@@ -1,5 +1,5 @@
 {
-  "name": "ai-dev-team",
+  "name": "alcantara-ai-teams",
   "version": "0.1.0",
   "description": "Technology-agnostic AI development team (Architect, Implementer, Reviewer, Security Pentester, QA) for Antigravity, Claude Code and Cursor.",
   "type": "module",
@@ -7,8 +7,16 @@
     "ai-dev-team": "bin/cli.mjs",
     "alcantara-ai-teams": "bin/cli.mjs"
   },
-  "files": ["bin", "src", "core", "schema", "dashboard"],
-  "engines": { "node": ">=18.3" },
+  "files": [
+    "bin",
+    "src",
+    "core",
+    "schema",
+    "dashboard"
+  ],
+  "engines": {
+    "node": ">=18.3"
+  },
   "scripts": {
     "test": "node --test"
   },
