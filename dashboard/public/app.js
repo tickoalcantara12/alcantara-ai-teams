@@ -1,4 +1,4 @@
-import { W, H, DESK_TOP, ROLES, drawRoom, drawStation, roleAt } from './sprites.js';
+import { W, H, DESK_TOP, ROLES, drawRoom, drawStation, isRoaming, getRoamerPose, drawRoamer, roleAt } from './sprites.js';
 
 const LOOP_LIMIT = 3;
 const HANDOFF_BUBBLE_MS = 6000;
@@ -42,6 +42,7 @@ const app = {
   receivedAt: 0,
   selected: ROLES[0].id,
   source: null,
+  lastTime: 0,
 };
 
 const ctx = els.canvas.getContext('2d');
@@ -72,7 +73,9 @@ for (const role of ROLES) {
 
 els.canvas.addEventListener('click', (event) => {
   const rect = els.canvas.getBoundingClientRect();
-  const role = roleAt(((event.clientX - rect.left) / rect.width) * W);
+  const lx = ((event.clientX - rect.left) / rect.width) * W;
+  const ly = ((event.clientY - rect.top) / rect.height) * H;
+  const role = roleAt(lx, ly, app.snapshot?.state?.agents, app.lastTime);
   if (role) select(role.id);
 });
 
@@ -235,13 +238,33 @@ function setConnection(state, text) {
 }
 
 function draw(time) {
+  app.lastTime = time;
   const frame = Math.floor(time / FRAME_MS);
   const now = serverNow();
   ctx.drawImage(background, 0, 0);
+
+  const roamers = [];
+  for (const role of ROLES) {
+    if (isRoaming(agentOf(role.id))) {
+      roamers.push({ role, pose: getRoamerPose(role.id, time) });
+    }
+  }
+  roamers.sort((a, b) => a.pose.y - b.pose.y);
+
+  for (const { role, pose } of roamers) {
+    if (pose.y < DESK_TOP) {
+      drawRoamer(ctx, role, { time, frame, selected: role.id === app.selected });
+    }
+  }
   for (const role of ROLES) {
     const agent = agentOf(role.id);
     const handoffActive = Boolean(agent?.handoff) && now - Date.parse(agent.handoff.at) < HANDOFF_BUBBLE_MS;
     drawStation(ctx, role, agent, { frame, selected: role.id === app.selected, handoffActive });
+  }
+  for (const { role, pose } of roamers) {
+    if (pose.y >= DESK_TOP) {
+      drawRoamer(ctx, role, { time, frame, selected: role.id === app.selected });
+    }
   }
   requestAnimationFrame(draw);
 }

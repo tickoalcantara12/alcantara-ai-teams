@@ -152,7 +152,147 @@ function drawPlant(ctx, x, y) {
 }
 
 /**
- * Draws one role's workstation: chair, character, desk, props, hands and status overlay.
+ * Returns true when an agent has no active work yet and should stroll around the office
+ * instead of sitting at their desk.
+ */
+export function isRoaming(agent) {
+  const status = agent?.status ?? 'idle';
+  return status === 'idle' && !agent?.participated;
+}
+
+// Waypoint loops for each role using the back walkway (y ~ 86), side aisles (x ~ 16 / 368),
+// and the front rug lounge (y ~ 152..172) so sprites never walk through desks.
+const ROAM_PATHS = {
+  architect: [
+    { x: 168, y: 86, pause: 2600 }, // studying whiteboard left
+    { x: 214, y: 86, pause: 2200 }, // studying whiteboard right
+    { x: 336, y: 86, pause: 1800 }, // looking out right window
+    { x: 366, y: 88, pause: 400 },
+    { x: 366, y: 156, pause: 400 },
+    { x: 280, y: 158, pause: 2000 }, // front rug right
+    { x: 110, y: 158, pause: 2200 }, // front rug left
+    { x: 18, y: 156, pause: 400 },
+    { x: 18, y: 88, pause: 400 },
+    { x: 46, y: 86, pause: 1800 },  // looking out left window
+  ],
+  implementer: [
+    { x: 76, y: 162, pause: 2000 },
+    { x: 192, y: 166, pause: 2500 },
+    { x: 312, y: 160, pause: 2100 },
+    { x: 242, y: 152, pause: 1800 },
+    { x: 136, y: 154, pause: 2200 },
+  ],
+  reviewer: [
+    { x: 260, y: 86, pause: 2400 }, // checking wall clock
+    { x: 192, y: 86, pause: 2200 }, // checking whiteboard
+    { x: 46, y: 86, pause: 1900 },  // left window
+    { x: 18, y: 88, pause: 400 },
+    { x: 18, y: 164, pause: 400 },
+    { x: 160, y: 164, pause: 2300 },
+    { x: 300, y: 164, pause: 2000 },
+    { x: 366, y: 164, pause: 400 },
+    { x: 366, y: 88, pause: 400 },
+  ],
+  security: [
+    { x: 344, y: 168, pause: 2300 }, // inspecting right plant
+    { x: 220, y: 160, pause: 1900 },
+    { x: 40, y: 168, pause: 2400 },  // inspecting left plant
+    { x: 150, y: 154, pause: 2000 },
+    { x: 290, y: 156, pause: 1800 },
+  ],
+  qa: [
+    { x: 120, y: 168, pause: 2100 },
+    { x: 264, y: 168, pause: 2400 },
+    { x: 340, y: 154, pause: 1700 },
+    { x: 200, y: 152, pause: 2200 },
+    { x: 52, y: 156, pause: 1900 },
+  ],
+};
+
+const WALK_SPEED_PX_PER_MS = 0.028;
+
+/**
+ * Computes the deterministic (x, y, moving, dir) pose for a roaming agent at `timeMs`.
+ */
+export function getRoamerPose(roleId, timeMs = 0) {
+  const pts = ROAM_PATHS[roleId] ?? ROAM_PATHS.implementer;
+  const segments = pts.map((pt, i) => {
+    const next = pts[(i + 1) % pts.length];
+    const dist = Math.hypot(next.x - pt.x, next.y - pt.y);
+    const moveMs = Math.max(1, Math.round(dist / WALK_SPEED_PX_PER_MS));
+    const pauseMs = pt.pause ?? 1500;
+    return { from: pt, to: next, pauseMs, moveMs, totalMs: pauseMs + moveMs };
+  });
+  const cycleMs = segments.reduce((acc, s) => acc + s.totalMs, 0);
+  // Offset each role so their pauses and strides don't synchronize mechanically
+  const roleOffset = ROLES.findIndex((r) => r.id === roleId) * 1730;
+  let t = (Math.max(0, timeMs) + roleOffset) % cycleMs;
+
+  for (const seg of segments) {
+    if (t < seg.pauseMs) {
+      return {
+        x: Math.round(seg.from.x),
+        y: Math.round(seg.from.y),
+        moving: false,
+        dir: seg.to.x >= seg.from.x ? 1 : -1,
+      };
+    }
+    t -= seg.pauseMs;
+    if (t < seg.moveMs) {
+      const ratio = t / seg.moveMs;
+      return {
+        x: Math.round(seg.from.x + (seg.to.x - seg.from.x) * ratio),
+        y: Math.round(seg.from.y + (seg.to.y - seg.from.y) * ratio),
+        moving: true,
+        dir: seg.to.x >= seg.from.x ? 1 : -1,
+      };
+    }
+    t -= seg.moveMs;
+  }
+  return { x: pts[0].x, y: pts[0].y, moving: false, dir: 1 };
+}
+
+/**
+ * Draws a roaming agent walking or standing on the office floor.
+ */
+export function drawRoamer(ctx, role, { time = 0, frame = 0, selected = false } = {}) {
+  const pose = getRoamerPose(role.id, time);
+  const cx = pose.x;
+  const stride = Math.floor(time / 150) % 4;
+  const bob = pose.moving && stride % 2 === 1 ? -1 : 0;
+  const top = pose.y - 18 + bob;
+  const p = PALETTE[role.id];
+  const ox = cx - 8;
+
+  // Floor shadow
+  px(ctx, cx - 6, pose.y + 3, 12, 2, 'rgba(0,0,0,0.24)');
+
+  // Legs / pants and shoes
+  const leftLegOffset = pose.moving ? (stride === 1 ? -1 : stride === 3 ? 1 : 0) : 0;
+  const rightLegOffset = pose.moving ? (stride === 3 ? -1 : stride === 1 ? 1 : 0) : 0;
+  px(ctx, ox + 4, top + 16, 3, 4 + leftLegOffset, '#263147');
+  px(ctx, ox + 9, top + 16, 3, 4 + rightLegOffset, '#263147');
+  px(ctx, ox + 4, top + 19 + leftLegOffset, 3, 2, '#151922');
+  px(ctx, ox + 9, top + 19 + rightLegOffset, 3, 2, '#151922');
+
+  // Head & torso
+  drawCharacter(ctx, role.id, cx, top, false, frame);
+
+  // Swinging arms on sides
+  const leftArmSwing = pose.moving ? (stride === 1 ? 1 : stride === 3 ? -1 : 0) : 0;
+  const rightArmSwing = pose.moving ? (stride === 3 ? 1 : stride === 1 ? -1 : 0) : 0;
+  px(ctx, ox + 1, top + 11 + leftArmSwing, 2, 4, p.shirt);
+  px(ctx, ox + 1, top + 15 + leftArmSwing, 2, 2, p.skin);
+  px(ctx, ox + 13, top + 11 + rightArmSwing, 2, 4, p.shirt);
+  px(ctx, ox + 13, top + 15 + rightArmSwing, 2, 2, p.skin);
+
+  if (selected) {
+    outline(ctx, cx - 11, top - 4, 22, 27, '#ffd166');
+  }
+}
+
+/**
+ * Draws one role's workstation: chair, character (when seated), desk, props, hands and status overlay.
  * `agent` is the reducer state for the role (or undefined before data arrives).
  */
 export function drawStation(ctx, role, agent, { frame, selected, handoffActive }) {
@@ -161,24 +301,29 @@ export function drawStation(ctx, role, agent, { frame, selected, handoffActive }
   const cx = role.x;
   const working = status === 'working' && !stale;
   const idle = status === 'idle';
+  const roaming = isRoaming(agent);
   const slump = idle ? 1 : 0;
 
   // Chair back.
   px(ctx, cx - 10, CHAR_TOP + 5, 20, 13, '#252b38');
   px(ctx, cx - 9, CHAR_TOP + 6, 18, 11, '#2f3647');
 
-  ctx.save();
-  if (idle) ctx.globalAlpha = 0.6;
-  drawCharacter(ctx, role.id, cx, CHAR_TOP + slump, status === 'waiting', frame);
-  ctx.restore();
+  if (!roaming) {
+    ctx.save();
+    if (idle) ctx.globalAlpha = 0.75;
+    drawCharacter(ctx, role.id, cx, CHAR_TOP + slump, status === 'waiting', frame);
+    ctx.restore();
+  }
 
   drawDesk(ctx, cx);
   drawProps(ctx, role.id, cx, working, frame);
 
-  ctx.save();
-  if (idle) ctx.globalAlpha = 0.6;
-  drawHands(ctx, role.id, cx, CHAR_TOP + slump, status, working, frame);
-  ctx.restore();
+  if (!roaming) {
+    ctx.save();
+    if (idle) ctx.globalAlpha = 0.75;
+    drawHands(ctx, role.id, cx, CHAR_TOP + slump, status, working, frame);
+    ctx.restore();
+  }
 
   const box = { x: cx - 33, y: CHAR_TOP - 20, w: 66, h: DESK_TOP + 27 - (CHAR_TOP - 20) };
   if (status === 'blocked' && frame % 2 === 0) {
@@ -189,7 +334,9 @@ export function drawStation(ctx, role, agent, { frame, selected, handoffActive }
     outline(ctx, box.x - 1, box.y - 1, box.w + 2, box.h + 2, '#ffd166');
   }
 
-  drawOverlay(ctx, cx, CHAR_TOP - 15, { status, stale, handoffActive, frame });
+  if (!roaming) {
+    drawOverlay(ctx, cx, CHAR_TOP - 15, { status, stale, handoffActive, frame });
+  }
 }
 
 function drawCharacter(ctx, roleId, cx, top, raisedHand, frame) {
@@ -365,7 +512,21 @@ function drawOverlay(ctx, cx, y, { status, stale, handoffActive, frame }) {
   }
 }
 
-/** Returns the role whose workstation contains the logical x coordinate. */
-export function roleAt(x) {
+/**
+ * Returns the role whose walking sprite or workstation contains the logical (x, y) coordinate.
+ */
+export function roleAt(x, y = DESK_TOP, agents = {}, time = 0) {
+  if (typeof y === 'number') {
+    for (const role of ROLES) {
+      const agent = agents?.[role.id];
+      if (isRoaming(agent)) {
+        const pose = getRoamerPose(role.id, time);
+        if (Math.abs(x - pose.x) <= 12 && y >= pose.y - 20 && y <= pose.y + 6) {
+          return role;
+        }
+      }
+    }
+  }
   return ROLES.find((role) => Math.abs(x - role.x) <= 36) ?? null;
 }
+

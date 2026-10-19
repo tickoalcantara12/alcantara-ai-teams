@@ -208,24 +208,25 @@ code {
 
 .empty {
   position: absolute;
-  inset: 18% 22%;
+  inset: 10px 16% auto 16%;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
-  padding: 22px 26px;
+  gap: 2px;
+  padding: 10px 16px;
   border-radius: var(--radius);
-  background: rgba(13, 17, 27, 0.92);
+  background: rgba(13, 17, 27, 0.86);
   border: 1px solid var(--line);
   backdrop-filter: blur(6px);
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   color: var(--muted);
+  pointer-events: none;
   animation: rise 0.35s ease;
 }
 
-.empty h2 { margin: 0 0 6px; color: var(--text); font-size: 1.1rem; }
-.empty p { margin: 4px 0; line-height: 1.5; }
+.empty h2 { margin: 0 0 2px; color: var(--text); font-size: 0.92rem; }
+.empty p { margin: 2px 0; line-height: 1.35; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
