@@ -99,11 +99,13 @@ Open your project in **Antigravity**, **Claude Code**, or **Cursor**, and type a
 | `/new-feature <idea or work-id>` | Building a new feature end-to-end | Full spec-driven pipeline (`Spec → Gate 1 → Design & Tasks → Gate 2 → TDD Implementation → Review / Security / QA → Spec Sync`). Reuses an approved spec if given `<work-id>`. |
 | `/bug-fix <description>` | Fixing a bug or regression | Reproduces the bug with a failing test first, fixes the root cause, and runs Review, Security, and QA verification. |
 | `/review [path or diff]` | Auditing existing code | Read-only audit across Code Review, Security Assessment, and QA Test Coverage. Modifies no files. |
+| `/fix-review [work-id or IDs]` | Fixing & enhancing after `/review` | Triages findings (`R<n>`, `S<n>`, `TC<n>`) from `/review`, confirms which to apply, implements surgical fixes + missing tests, and re-verifies. |
+| `/e2e <flow, URL, or work-id>` | Running End-to-End testing | Plans, writes, and executes automated E2E / integration tests (Playwright, Cypress, Supertest, Pytest, etc.), files `bugs/BUG-<n>.md` on failure, and optionally fixes defects. |
 | `/review-pr <PR>` | Reviewing a teammate's PR | Reviews a pull request and drafts inline/summary comments. Posts to GitHub/GitLab only after you confirm. |
 | `/pr-feedback <PR>` | Addressing review comments on your PR | Triages reviewer comments on your PR, implements accepted fixes with tests, and drafts replies. Pushes/posts only after you confirm. |
 
 > **Tip for each tool:**
-> - **Antigravity (`agy`)**: Type `/new-feature ...`, `/spec ...`, `/bug-fix ...` directly in chat (loaded from `.agents/workflows/`), or ask any role directly (e.g. *"Use `role-architect` to design..."*).
+> - **Antigravity (`agy`)**: Type `/new-feature ...`, `/spec ...`, `/bug-fix ...`, `/e2e ...`, `/fix-review ...` directly in chat (loaded from `.agents/workflows/`), or ask any role directly (e.g. *"Use `role-architect` to design..."*).
 > - **Claude Code (`claude`)**: Type `/new-feature ...` or `/project:new-feature ...` in Claude Code chat. Claude Code automatically delegates to the subagents in `.claude/agents/`.
 > - **Cursor**: Type `/new-feature ...` in Cursor Agent chat (from `.cursor/commands/`) or reference `@ai-team-role-architect`, `@ai-team-role-implementer`, etc.
 
@@ -197,13 +199,21 @@ When a user reports a bug or a test is failing in production:
 
 ---
 
-### Example 4: Auditing Code or Reviewing a Pull Request (`/review` & `/review-pr`)
+### Example 4: Auditing Code, Fixing Findings & Reviewing PRs (`/review`, `/fix-review`, `/review-pr`)
 
-- **Audit a local module or uncommitted diff (read-only):**
+- **Step 1 — Audit a local module or uncommitted diff (read-only):**
   ```text
   /review src/auth/
   ```
-  Produces a consolidated report from the **Reviewer**, **Security Pentester**, and **QA Engineer** ranked by `BLOCKING`, `SHOULD_FIX`, and `NIT` without modifying your working tree.
+  Produces `.ai-team/review-auth/review.md`, `security-report.md`, and `test-report.md` from the **Reviewer**, **Security Pentester**, and **QA Engineer** ranked by severity without modifying your working tree.
+
+- **Step 2 — Fix findings & implement enhancements from the review:**
+  ```text
+  /fix-review review-auth
+  # or fix specific items directly:
+  /fix-review review-auth R1, R2, S1, TC1
+  ```
+  Lists the findings from `review-auth`, confirms which items to apply (*all*, *blocking only*, or specific IDs), hands off to **Implementer** (code/security fixes) and **QA** (missing tests), and re-runs **Reviewer + Security + QA** verification.
 
 - **Review a GitHub/GitLab Pull Request:**
   ```text
@@ -219,7 +229,21 @@ When a user reports a bug or a test is failing in production:
 
 ---
 
-### Example 5: Checking Progress from the Terminal (`status`)
+### Example 5: End-to-End (E2E) Testing (`/e2e`)
+
+Write and execute automated E2E or integration tests for any user flow or API sequence:
+
+```text
+/e2e User registration, email verification, and login flow
+```
+- **What happens:**
+  1. **QA Engineer** detects your E2E stack (Playwright, Cypress, Supertest, Pytest, etc.) and drafts `.ai-team/e2e-auth-flow/test-plan.md` covering happy path, permissions, and negative cases (`TC1`, `TC2`, …).
+  2. Writes deterministic automated E2E tests and runs the suite.
+  3. Records real pass/fail output in `test-report.md`. If an application bug causes a failure, files `bugs/BUG-1.md` and asks if you want **Implementer** to fix it and re-verify.
+
+---
+
+### Example 6: Checking Progress from the Terminal (`status`)
 
 While agents work (or when resuming a project later), inspect progress from your terminal:
 

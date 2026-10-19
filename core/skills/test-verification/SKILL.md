@@ -17,3 +17,9 @@ description: Step-by-step procedure for the QA Engineer to verify every spec req
 ## Bug-fix mode
 1. Reproduce the bug and write a **failing** regression test first.
 2. After the fix, confirm the test passes and run the regression suite around the affected area.
+
+## E2E mode (`/e2e`)
+1. Detect the project's E2E runner (Playwright, Cypress, Supertest, Pytest, Go httptest, or browser MCP) and how the app/test server is launched.
+2. Write `test-plan.md` covering the end-to-end user journey or API sequence (`TC1`, `TC2`, …): happy path, auth/permissions, validation errors, and isolated test-data setup/teardown.
+3. Write deterministic automated E2E tests (avoid arbitrary `sleep` calls; await explicit UI states, network responses, or database assertions).
+4. Execute the E2E suite, record actual output in `test-report.md`, and file `bugs/BUG-<n>.md` for any application failure.

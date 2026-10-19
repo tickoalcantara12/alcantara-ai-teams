@@ -21,7 +21,7 @@ import { parseFrontmatter, serializeFrontmatter } from '../src/frontmatter.mjs';
 
 const ROLES = ['architect', 'implementer', 'reviewer', 'security', 'qa'];
 const SKILLS = ['system-design', 'implement-task', 'code-review', 'security-assessment', 'test-verification'];
-const COMMANDS = ['new-feature', 'bug-fix', 'review', 'review-pr', 'pr-feedback', 'spec'];
+const COMMANDS = ['new-feature', 'bug-fix', 'review', 'fix-review', 'e2e', 'review-pr', 'pr-feedback', 'spec'];
 const SDD_TEMPLATES = ['spec.md', 'tasks.md', 'constitution.md', 'analysis.md', 'design.md'];
 
 async function withTempDir(fn) {
