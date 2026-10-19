@@ -59,22 +59,22 @@ npx /path/to/ai-dev-team init
 # or: node /path/to/ai-dev-team/bin/cli.mjs install --target claude-code
 ```
 
-**Once published to npm:**
+**Once published to npm (`alcantara-ai-teams`):**
 ```bash
 cd /path/to/your-project
-npx ai-dev-team init
-npx ai-dev-team install --target claude-code      # or: antigravity | cursor
+npx alcantara-ai-teams init
+npx alcantara-ai-teams install --target claude-code      # or: antigravity | cursor
 ```
 
 Options:
 ```bash
-npx ai-dev-team init                                 # interactive wizard (tools + project + stack + MCP + constitution)
-npx ai-dev-team init --yes --all                     # non-interactive: all tools + auto-detected constitution
-npx ai-dev-team install -t antigravity -t cursor     # several tools at once
-npx ai-dev-team install --all                        # all three tools (-a)
-npx ai-dev-team install -t claude-code --dir ../app  # install into another folder
-npx ai-dev-team install -t claude-code --dry-run     # preview, write nothing
-npx ai-dev-team install -t claude-code --force       # overwrite files that already exist
+npx alcantara-ai-teams init                                 # interactive wizard (tools + project + stack + MCP + constitution)
+npx alcantara-ai-teams init --yes --all                     # non-interactive: all tools + auto-detected constitution
+npx alcantara-ai-teams install -t antigravity -t cursor     # several tools at once
+npx alcantara-ai-teams install --all                        # all three tools (-a)
+npx alcantara-ai-teams install -t claude-code --dir ../app  # install into another folder
+npx alcantara-ai-teams install -t claude-code --dry-run     # preview, write nothing
+npx alcantara-ai-teams install -t claude-code --force       # overwrite files that already exist
 ```
 - Files that already exist are skipped unless you pass `--force`, so your own edits are not lost.
 - `CLAUDE.md` and `.agents/AGENTS.md` get a block between `<!-- ai-dev-team:start -->` and `<!-- ai-dev-team:end -->`. The rest of the file is kept, and re-running only replaces that block.
