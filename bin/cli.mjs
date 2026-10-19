@@ -41,7 +41,7 @@ Status options (inspect current work items from the terminal):
       --work-id  Work item to inspect (default: all active work items)
 
 Dashboard options (read-only office view, served on 127.0.0.1 only):
-      --port     Port to listen on (default 4173, 0 = any free port)
+      --port     Port to listen on (default 3021, 0 = any free port)
       --no-open  Do not open the browser automatically
       --demo     Show a scripted run instead of reading the project
 

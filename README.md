@@ -129,7 +129,7 @@ npx github:tickoalcantara12/alcantara-ai-teams init
 npx github:tickoalcantara12/alcantara-ai-teams status
 npx github:tickoalcantara12/alcantara-ai-teams status --work-id feat-todo-api
 
-# Launch the live pixel-art office dashboard on http://127.0.0.1:4173
+# Launch the live pixel-art office dashboard on http://127.0.0.1:3021
 npx github:tickoalcantara12/alcantara-ai-teams dashboard
 npx github:tickoalcantara12/alcantara-ai-teams dashboard --demo
 ```
@@ -272,7 +272,7 @@ Suggestion: commit the specs and designs, and keep `.ai-team/**/events.jsonl` in
 Agents report what they are doing by appending events to `.ai-team/<work-id>/events.jsonl`. The installed rules tell them when to do it: start, handoff, waiting for you, verdict, fix loop, done.
 
 ```bash
-npx github:tickoalcantara12/alcantara-ai-teams dashboard        # your project, port 4173
+npx github:tickoalcantara12/alcantara-ai-teams dashboard        # your project, port 3021
 npx github:tickoalcantara12/alcantara-ai-teams dashboard --demo # scripted run, no agent needed
 npx ai-dev-team dashboard --dir ../app --port 5000 --no-open
 ```
@@ -315,7 +315,7 @@ Edit the files in `core/`: `roles/`, `skills/`, `commands/`, `templates/`, `work
 | Commands do not appear in the tool | Restart or reload the tool, and check the files exist (see the table above) |
 | `= <file> (exists, use --force to overwrite)` | The file was already there and was left alone. Use `--force` to replace it |
 | `Unknown target` | Use one of `antigravity`, `claude-code`, `cursor` |
-| `Port 4173 is already in use` | `dashboard --port <other>` |
+| `Port 3021 is already in use` | `dashboard --port <other>` |
 | Agents did not write events | The tool may not have run the `event` command. Check `.ai-team/<work-id>/events.jsonl` |
 | PR commands cannot fetch the PR | Install and sign in to `gh` or `glab`, or paste the diff or comments |
 

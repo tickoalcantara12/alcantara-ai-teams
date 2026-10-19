@@ -8,7 +8,7 @@ import { reduceEvents } from './state.mjs';
 import { createFileSource } from './source.mjs';
 import { createDemoSource } from './demo.mjs';
 
-export const DEFAULT_PORT = 4173;
+export const DEFAULT_PORT = 3021;
 const DEFAULT_PUBLIC_DIR = fileURLToPath(new URL('./public/', import.meta.url));
 const ALLOWED_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const MAX_STREAMS = 20;
