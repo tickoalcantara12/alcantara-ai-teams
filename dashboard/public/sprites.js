@@ -152,115 +152,138 @@ function drawPlant(ctx, x, y) {
 }
 
 /**
- * Returns true when an agent has no active work yet and should stroll around the office
- * instead of sitting at their desk.
+ * Returns true when an agent is idle (not actively showing a handoff bubble at their desk)
+ * and should roam around the office doing random idle behaviours.
  */
-export function isRoaming(agent) {
+export function isRoaming(agent, handoffActive = false) {
   const status = agent?.status ?? 'idle';
-  return status === 'idle' && !agent?.participated;
+  return status === 'idle' && !handoffActive;
 }
 
-// Waypoint loops for each role using the back walkway (y ~ 86), side aisles (x ~ 16 / 368),
-// and the front rug lounge (y ~ 152..172) so sprites never walk through desks.
-const ROAM_PATHS = {
-  architect: [
-    { x: 168, y: 86, pause: 2600 }, // studying whiteboard left
-    { x: 214, y: 86, pause: 2200 }, // studying whiteboard right
-    { x: 336, y: 86, pause: 1800 }, // looking out right window
-    { x: 366, y: 88, pause: 400 },
-    { x: 366, y: 156, pause: 400 },
-    { x: 280, y: 158, pause: 2000 }, // front rug right
-    { x: 110, y: 158, pause: 2200 }, // front rug left
-    { x: 18, y: 156, pause: 400 },
-    { x: 18, y: 88, pause: 400 },
-    { x: 46, y: 86, pause: 1800 },  // looking out left window
-  ],
-  implementer: [
-    { x: 76, y: 162, pause: 2000 },
-    { x: 192, y: 166, pause: 2500 },
-    { x: 312, y: 160, pause: 2100 },
-    { x: 242, y: 152, pause: 1800 },
-    { x: 136, y: 154, pause: 2200 },
-  ],
-  reviewer: [
-    { x: 260, y: 86, pause: 2400 }, // checking wall clock
-    { x: 192, y: 86, pause: 2200 }, // checking whiteboard
-    { x: 46, y: 86, pause: 1900 },  // left window
-    { x: 18, y: 88, pause: 400 },
-    { x: 18, y: 164, pause: 400 },
-    { x: 160, y: 164, pause: 2300 },
-    { x: 300, y: 164, pause: 2000 },
-    { x: 366, y: 164, pause: 400 },
-    { x: 366, y: 88, pause: 400 },
-  ],
-  security: [
-    { x: 344, y: 168, pause: 2300 }, // inspecting right plant
-    { x: 220, y: 160, pause: 1900 },
-    { x: 40, y: 168, pause: 2400 },  // inspecting left plant
-    { x: 150, y: 154, pause: 2000 },
-    { x: 290, y: 156, pause: 1800 },
-  ],
-  qa: [
-    { x: 120, y: 168, pause: 2100 },
-    { x: 264, y: 168, pause: 2400 },
-    { x: 340, y: 154, pause: 1700 },
-    { x: 200, y: 152, pause: 2200 },
-    { x: 52, y: 156, pause: 1900 },
-  ],
-};
+export const IDLE_ACTIVITIES = ['coffee', 'stretch', 'think', 'phone', 'music', 'look'];
 
-const WALK_SPEED_PX_PER_MS = 0.028;
+// Office spots on the back walkway (y ~ 86) and front rug lounge (y ~ 153..169).
+const IDLE_SPOTS = [
+  { x: 46, y: 86, zone: 'back' },   // left window
+  { x: 164, y: 86, zone: 'back' },  // whiteboard left
+  { x: 216, y: 86, zone: 'back' },  // whiteboard right
+  { x: 262, y: 86, zone: 'back' },  // wall clock
+  { x: 336, y: 86, zone: 'back' },  // right window
+  { x: 44, y: 164, zone: 'front' }, // front-left plant
+  { x: 96, y: 156, zone: 'front' }, // lounge left
+  { x: 148, y: 166, zone: 'front' }, // lounge center-left
+  { x: 196, y: 158, zone: 'front' }, // lounge center
+  { x: 248, y: 166, zone: 'front' }, // lounge center-right
+  { x: 298, y: 156, zone: 'front' }, // lounge right
+  { x: 342, y: 164, zone: 'front' }, // front-right plant
+];
+
+const SLOT_MS = 6400;
+
+function hash32(n) {
+  let x = (n | 0) + 0x9e3779b9;
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+function spotForSlot(roleIdx, slot) {
+  const h = hash32(roleIdx * 10007 + slot * 31337);
+  // Ensure each role picks a distinct spot within the same time slot
+  const baseIdx = ((h % IDLE_SPOTS.length) + roleIdx * 2) % IDLE_SPOTS.length;
+  const base = IDLE_SPOTS[baseIdx];
+  const jitterX = ((h >>> 8) % 9) - 4;
+  const jitterY = base.zone === 'front' ? (((h >>> 12) % 5) - 2) : 0;
+  const activity = IDLE_ACTIVITIES[(h >>> 16) % IDLE_ACTIVITIES.length];
+  const pauseRatio = 0.36 + (((h >>> 20) % 20) / 100); // 36%..55% of slot spent doing idle behaviour
+  return {
+    x: base.x + jitterX,
+    y: base.y + jitterY,
+    zone: base.zone,
+    activity,
+    pauseMs: Math.round(SLOT_MS * pauseRatio),
+  };
+}
+
+function buildWalkWaypoints(from, to) {
+  if (from.zone === to.zone) return [from, to];
+  // Route around the desk row via the nearer side aisle (left x=18 or right x=366)
+  const aisleX = (from.x + to.x) / 2 < W / 2 ? 18 : 366;
+  return [
+    from,
+    { x: aisleX, y: from.y },
+    { x: aisleX, y: to.y },
+    to,
+  ];
+}
 
 /**
- * Computes the deterministic (x, y, moving, dir) pose for a roaming agent at `timeMs`.
+ * Computes the pseudo-random (x, y, moving, dir, activity) pose for an idle agent at `timeMs`.
  */
 export function getRoamerPose(roleId, timeMs = 0) {
-  const pts = ROAM_PATHS[roleId] ?? ROAM_PATHS.implementer;
-  const segments = pts.map((pt, i) => {
-    const next = pts[(i + 1) % pts.length];
-    const dist = Math.hypot(next.x - pt.x, next.y - pt.y);
-    const moveMs = Math.max(1, Math.round(dist / WALK_SPEED_PX_PER_MS));
-    const pauseMs = pt.pause ?? 1500;
-    return { from: pt, to: next, pauseMs, moveMs, totalMs: pauseMs + moveMs };
-  });
-  const cycleMs = segments.reduce((acc, s) => acc + s.totalMs, 0);
-  // Offset each role so their pauses and strides don't synchronize mechanically
-  const roleOffset = ROLES.findIndex((r) => r.id === roleId) * 1730;
-  let t = (Math.max(0, timeMs) + roleOffset) % cycleMs;
+  const roleIdx = Math.max(0, ROLES.findIndex((r) => r.id === roleId));
+  const shifted = Math.max(0, timeMs) + roleIdx * 1730;
+  const slot = Math.floor(shifted / SLOT_MS);
+  const t = shifted - slot * SLOT_MS;
 
-  for (const seg of segments) {
-    if (t < seg.pauseMs) {
-      return {
-        x: Math.round(seg.from.x),
-        y: Math.round(seg.from.y),
-        moving: false,
-        dir: seg.to.x >= seg.from.x ? 1 : -1,
-      };
-    }
-    t -= seg.pauseMs;
-    if (t < seg.moveMs) {
-      const ratio = t / seg.moveMs;
-      return {
-        x: Math.round(seg.from.x + (seg.to.x - seg.from.x) * ratio),
-        y: Math.round(seg.from.y + (seg.to.y - seg.from.y) * ratio),
-        moving: true,
-        dir: seg.to.x >= seg.from.x ? 1 : -1,
-      };
-    }
-    t -= seg.moveMs;
+  const from = spotForSlot(roleIdx, slot);
+  const to = spotForSlot(roleIdx, slot + 1);
+
+  if (t < from.pauseMs || (from.x === to.x && from.y === to.y)) {
+    return {
+      x: Math.round(from.x),
+      y: Math.round(from.y),
+      moving: false,
+      dir: to.x >= from.x ? 1 : -1,
+      activity: from.activity,
+    };
   }
-  return { x: pts[0].x, y: pts[0].y, moving: false, dir: 1 };
+
+  const moveElapsed = t - from.pauseMs;
+  const moveBudget = SLOT_MS - from.pauseMs;
+  const pts = buildWalkWaypoints(from, to);
+  const legs = [];
+  let totalDist = 0;
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    legs.push({ a, b, dist });
+    totalDist += dist;
+  }
+
+  if (totalDist === 0) {
+    return { x: Math.round(from.x), y: Math.round(from.y), moving: false, dir: 1, activity: from.activity };
+  }
+
+  let targetDist = (moveElapsed / moveBudget) * totalDist;
+  for (const leg of legs) {
+    if (targetDist <= leg.dist || leg === legs[legs.length - 1]) {
+      const ratio = leg.dist > 0 ? Math.min(1, targetDist / leg.dist) : 1;
+      return {
+        x: Math.round(leg.a.x + (leg.b.x - leg.a.x) * ratio),
+        y: Math.round(leg.a.y + (leg.b.y - leg.a.y) * ratio),
+        moving: true,
+        dir: leg.b.x >= leg.a.x ? 1 : -1,
+        activity: 'walk',
+      };
+    }
+    targetDist -= leg.dist;
+  }
+
+  return { x: Math.round(to.x), y: Math.round(to.y), moving: false, dir: 1, activity: to.activity };
 }
 
 /**
- * Draws a roaming agent walking or standing on the office floor.
+ * Draws a roaming agent walking or performing a random idle behaviour on the office floor.
  */
 export function drawRoamer(ctx, role, { time = 0, frame = 0, selected = false } = {}) {
   const pose = getRoamerPose(role.id, time);
   const cx = pose.x;
   const stride = Math.floor(time / 150) % 4;
-  const bob = pose.moving && stride % 2 === 1 ? -1 : 0;
-  const top = pose.y - 18 + bob;
+  const idleBob = !pose.moving && (pose.activity === 'stretch' || pose.activity === 'music') && frame % 2 === 1 ? -1 : 0;
+  const walkBob = pose.moving && stride % 2 === 1 ? -1 : 0;
+  const top = pose.y - 18 + walkBob + idleBob;
   const p = PALETTE[role.id];
   const ox = cx - 8;
 
@@ -278,16 +301,97 @@ export function drawRoamer(ctx, role, { time = 0, frame = 0, selected = false } 
   // Head & torso
   drawCharacter(ctx, role.id, cx, top, false, frame);
 
-  // Swinging arms on sides
-  const leftArmSwing = pose.moving ? (stride === 1 ? 1 : stride === 3 ? -1 : 0) : 0;
-  const rightArmSwing = pose.moving ? (stride === 3 ? 1 : stride === 1 ? -1 : 0) : 0;
-  px(ctx, ox + 1, top + 11 + leftArmSwing, 2, 4, p.shirt);
-  px(ctx, ox + 1, top + 15 + leftArmSwing, 2, 2, p.skin);
-  px(ctx, ox + 13, top + 11 + rightArmSwing, 2, 4, p.shirt);
-  px(ctx, ox + 13, top + 15 + rightArmSwing, 2, 2, p.skin);
+  if (pose.moving) {
+    // Swinging arms while walking
+    const leftArmSwing = stride === 1 ? 1 : stride === 3 ? -1 : 0;
+    const rightArmSwing = stride === 3 ? 1 : stride === 1 ? -1 : 0;
+    px(ctx, ox + 1, top + 11 + leftArmSwing, 2, 4, p.shirt);
+    px(ctx, ox + 1, top + 15 + leftArmSwing, 2, 2, p.skin);
+    px(ctx, ox + 13, top + 11 + rightArmSwing, 2, 4, p.shirt);
+    px(ctx, ox + 13, top + 15 + rightArmSwing, 2, 2, p.skin);
+  } else {
+    drawIdleActivity(ctx, role.id, cx, top, pose.activity, frame);
+  }
 
   if (selected) {
     outline(ctx, cx - 11, top - 4, 22, 27, '#ffd166');
+  }
+}
+
+function drawIdleActivity(ctx, roleId, cx, top, activity, frame) {
+  const p = PALETTE[roleId];
+  const ox = cx - 8;
+  switch (activity) {
+    case 'coffee': {
+      // Left arm relaxed, right arm holding a warm mug with steam
+      px(ctx, ox + 1, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 1, top + 15, 2, 2, p.skin);
+      px(ctx, ox + 13, top + 10, 2, 3, p.shirt);
+      px(ctx, ox + 13, top + 12, 2, 2, p.skin);
+      // Coffee mug + rising steam
+      const sip = frame % 4 === 0 ? -1 : 0;
+      px(ctx, ox + 14, top + 9 + sip, 4, 4, '#f2f2f2');
+      px(ctx, ox + 15, top + 9 + sip, 2, 1, '#6b4226');
+      px(ctx, ox + 18, top + 10 + sip, 1, 2, '#f2f2f2');
+      px(ctx, ox + 15 + (frame % 2), top + 6 - (frame % 2), 1, 2, 'rgba(255,255,255,0.65)');
+      break;
+    }
+    case 'stretch': {
+      // Both arms raised stretching overhead
+      const lift = frame % 2;
+      px(ctx, ox + 1, top + 5 - lift, 2, 6, p.shirt);
+      px(ctx, ox + 1, top + 3 - lift, 2, 2, p.skin);
+      px(ctx, ox + 13, top + 5 - lift, 2, 6, p.shirt);
+      px(ctx, ox + 13, top + 3 - lift, 2, 2, p.skin);
+      break;
+    }
+    case 'think': {
+      // One hand on chin, ellipsis thought bubble above head
+      px(ctx, ox + 1, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 1, top + 15, 2, 2, p.skin);
+      px(ctx, ox + 12, top + 9, 2, 4, p.shirt);
+      px(ctx, ox + 10, top + 8, 2, 2, p.skin);
+      px(ctx, cx - 5, top - 9, 11, 5, 'rgba(255,255,255,0.88)');
+      const dots = (frame % 3) + 1;
+      for (let i = 0; i < dots; i += 1) {
+        px(ctx, cx - 3 + i * 3, top - 7, 1, 1, '#3a6df0');
+      }
+      break;
+    }
+    case 'phone': {
+      // Holding a glowing handheld device in front
+      px(ctx, ox + 1, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 1, top + 15, 2, 2, p.skin);
+      px(ctx, ox + 13, top + 10, 2, 3, p.shirt);
+      px(ctx, ox + 12, top + 12, 2, 2, p.skin);
+      px(ctx, ox + 13, top + 9, 3, 4, '#1b2230');
+      px(ctx, ox + 14, top + 10, 1, 2, frame % 2 === 0 ? '#5ce1e6' : '#38bdf8');
+      break;
+    }
+    case 'music': {
+      // Relaxed arms + floating musical note above head
+      px(ctx, ox + 1, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 1, top + 15, 2, 2, p.skin);
+      px(ctx, ox + 13, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 13, top + 15, 2, 2, p.skin);
+      const ny = top - 8 - (frame % 2);
+      const nx = cx + 5 + (frame % 2);
+      px(ctx, nx, ny + 2, 2, 2, '#ffd166');
+      px(ctx, nx + 1, ny - 1, 1, 3, '#ffd166');
+      px(ctx, nx + 2, ny - 1, 2, 1, '#ffd166');
+      break;
+    }
+    default: {
+      // 'look' — glancing side to side with arms relaxed
+      px(ctx, ox + 1, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 1, top + 15, 2, 2, p.skin);
+      px(ctx, ox + 13, top + 11, 2, 4, p.shirt);
+      px(ctx, ox + 13, top + 15, 2, 2, p.skin);
+      const shift = frame % 4 < 2 ? -1 : 1;
+      px(ctx, ox + 6 + shift, top + 5, 1, 1, '#1b1b22');
+      px(ctx, ox + 9 + shift, top + 5, 1, 1, '#1b1b22');
+      break;
+    }
   }
 }
 
@@ -301,7 +405,7 @@ export function drawStation(ctx, role, agent, { frame, selected, handoffActive }
   const cx = role.x;
   const working = status === 'working' && !stale;
   const idle = status === 'idle';
-  const roaming = isRoaming(agent);
+  const roaming = isRoaming(agent, handoffActive);
   const slump = idle ? 1 : 0;
 
   // Chair back.
@@ -529,4 +633,30 @@ export function roleAt(x, y = DESK_TOP, agents = {}, time = 0) {
   }
   return ROLES.find((role) => Math.abs(x - role.x) <= 36) ?? null;
 }
+
+/**
+ * Determines which work item the dashboard should display so it automatically refreshes
+ * to the active (non-done, most recently updated) work item.
+ */
+export function pickActiveWork(works, { currentWorkId = null, userSelected = false, lastTopKey = null } = {}) {
+  if (!Array.isArray(works) || works.length === 0) {
+    return { workId: currentWorkId, topKey: null, switched: false, userSelected };
+  }
+  const active = works.find((w) => !w.done) ?? works[0];
+  const top = works[0];
+  const topKey = `${top.workId}:${top.updatedAt ?? ''}`;
+  const newActivityOnTop = lastTopKey !== null && topKey !== lastTopKey && !top.done;
+
+  if (!currentWorkId) {
+    return { workId: active.workId, topKey, switched: true, userSelected: false };
+  }
+  if (newActivityOnTop && top.workId !== currentWorkId) {
+    return { workId: top.workId, topKey, switched: true, userSelected: false };
+  }
+  if (!userSelected && active.workId !== currentWorkId) {
+    return { workId: active.workId, topKey, switched: true, userSelected: false };
+  }
+  return { workId: currentWorkId, topKey, switched: false, userSelected };
+}
+
 

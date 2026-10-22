@@ -1,8 +1,8 @@
-import { W, H, DESK_TOP, ROLES, drawRoom, drawStation, isRoaming, getRoamerPose, drawRoamer, roleAt } from './sprites.js';
+import { W, H, DESK_TOP, ROLES, drawRoom, drawStation, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from './sprites.js';
 
 const LOOP_LIMIT = 3;
 const HANDOFF_BUBBLE_MS = 6000;
-const WORKS_REFRESH_MS = 5000;
+const WORKS_REFRESH_MS = 2500;
 const FRAME_MS = 280;
 
 const STATUS_LABELS = {
@@ -43,6 +43,8 @@ const app = {
   selected: ROLES[0].id,
   source: null,
   lastTime: 0,
+  userSelected: false,
+  lastTopKey: null,
 };
 
 const ctx = els.canvas.getContext('2d');
@@ -88,7 +90,10 @@ document.addEventListener('keydown', (event) => {
   tagButtons.get(ROLES[next].id).focus();
 });
 
-els.select.addEventListener('change', () => openWork(els.select.value));
+els.select.addEventListener('change', () => {
+  app.userSelected = true;
+  openWork(els.select.value);
+});
 
 function select(roleId) {
   app.selected = roleId;
@@ -245,7 +250,9 @@ function draw(time) {
 
   const roamers = [];
   for (const role of ROLES) {
-    if (isRoaming(agentOf(role.id))) {
+    const agent = agentOf(role.id);
+    const handoffActive = Boolean(agent?.handoff) && now - Date.parse(agent.handoff.at) < HANDOFF_BUBBLE_MS;
+    if (isRoaming(agent, handoffActive)) {
       roamers.push({ role, pose: getRoamerPose(role.id, time) });
     }
   }
@@ -307,7 +314,7 @@ function renderWorkOptions() {
     ...app.works.map((work) => {
       const option = document.createElement('option');
       option.value = work.workId;
-      option.textContent = work.workId;
+      option.textContent = work.done ? `${work.workId} (done)` : `${work.workId} (active)`;
       return option;
     }),
   );
@@ -328,8 +335,18 @@ async function refreshWorks() {
     if (!response.ok) throw new Error(String(response.status));
     const { works } = await response.json();
     app.works = Array.isArray(works) ? works : [];
-    if (!app.workId && app.works.length > 0) openWork(app.works[0].workId);
-    else if (app.works.length === 0 && !app.workId) setConnection('connecting', 'Waiting for work');
+    const decision = pickActiveWork(app.works, {
+      currentWorkId: app.workId,
+      userSelected: app.userSelected,
+      lastTopKey: app.lastTopKey,
+    });
+    app.lastTopKey = decision.topKey;
+    app.userSelected = decision.userSelected;
+    if (decision.switched && decision.workId) {
+      openWork(decision.workId);
+    } else if (app.works.length === 0 && !app.workId) {
+      setConnection('connecting', 'Waiting for work');
+    }
     renderWorkOptions();
   } catch {
     if (!app.source) setConnection('offline', 'Server unreachable');

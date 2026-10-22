@@ -25,7 +25,11 @@ export function createFileSource(projectDir) {
       for (const entry of entries) {
         if (!entry.isDirectory() || !WORK_ID_PATTERN.test(entry.name)) continue;
         const info = await statEventsFile(projectDir, entry.name);
-        if (info) works.push({ workId: entry.name, updatedAt: info.mtime.toISOString(), bytes: info.size });
+        if (info) {
+          const events = await this.readEvents(entry.name);
+          const done = events.at(-1)?.event === 'done';
+          works.push({ workId: entry.name, updatedAt: info.mtime.toISOString(), bytes: info.size, done });
+        }
       }
       works.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       return works.slice(0, MAX_WORKS);

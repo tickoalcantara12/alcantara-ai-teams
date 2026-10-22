@@ -51,7 +51,8 @@ export function createDemoSource({ now = Date.now, startedAt = now() } = {}) {
   return {
     async listWorks() {
       const { events } = visible();
-      return [{ workId: DEMO_WORK_ID, updatedAt: events.at(-1)?.ts ?? null, bytes: 0 }];
+      const done = events.at(-1)?.event === 'done';
+      return [{ workId: DEMO_WORK_ID, updatedAt: events.at(-1)?.ts ?? null, bytes: 0, done }];
     },
     async readEvents(workId) {
       return workId === DEMO_WORK_ID ? visible().events : [];

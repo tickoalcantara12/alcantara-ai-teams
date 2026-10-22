@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createEvent } from '../src/events.mjs';
 import { reduceEvents, STALE_AFTER_MS, RECENT_EVENTS_LIMIT } from '../dashboard/state.mjs';
 import { createDemoSource, CYCLE_SECONDS, DEMO_WORK_ID } from '../dashboard/demo.mjs';
-import { ROLES, isRoaming, getRoamerPose, drawRoamer, roleAt } from '../dashboard/public/sprites.js';
+import { ROLES, IDLE_ACTIVITIES, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from '../dashboard/public/sprites.js';
 
 const T0 = Date.parse('2026-10-16T05:00:00.000Z');
 let tick = 0;
@@ -172,20 +172,30 @@ test('demo source reveals events over time and restarts each cycle', async () =>
   assert.equal((await demo.listWorks())[0].workId, DEMO_WORK_ID);
 });
 
-test('idle unparticipated agents roam around the office and return to desk when working or participated', () => {
+test('idle agents roam around the office with random behaviours and return to desk when working', () => {
   assert.equal(isRoaming(undefined), true);
   assert.equal(isRoaming({ status: 'idle', participated: false }), true);
-  assert.equal(isRoaming({ status: 'idle', participated: true }), false);
+  assert.equal(isRoaming({ status: 'idle', participated: true }, false), true);
+  assert.equal(isRoaming({ status: 'idle', participated: true }, true), false);
   assert.equal(isRoaming({ status: 'working', participated: true }), false);
   assert.equal(isRoaming({ status: 'done', participated: true }), false);
 
+  const seenActivities = new Set();
   for (const role of ROLES) {
     const p0 = getRoamerPose(role.id, 0);
-    const p1 = getRoamerPose(role.id, 4500);
+    const p1 = getRoamerPose(role.id, 4800);
     assert.equal(typeof p0.x, 'number');
     assert.equal(typeof p0.y, 'number');
     assert.equal(typeof p0.moving, 'boolean');
     assert.ok(p0.x !== p1.x || p0.y !== p1.y, `${role.id} should move over time`);
+
+    for (let slot = 0; slot < 20; slot += 1) {
+      const pose = getRoamerPose(role.id, slot * 6400);
+      if (!pose.moving) {
+        assert.ok(IDLE_ACTIVITIES.includes(pose.activity), `unexpected activity ${pose.activity}`);
+        seenActivities.add(pose.activity);
+      }
+    }
 
     const matched = roleAt(p0.x, p0.y, {}, 0);
     assert.ok(matched, `should hit-test roamer or station at (${p0.x}, ${p0.y})`);
@@ -195,8 +205,46 @@ test('idle unparticipated agents roam around the office and return to desk when 
       fillStyle: '',
       fillRect: (...args) => ops.push(args),
     };
-    drawRoamer(mockCtx, role, { time: 1200, frame: 4, selected: true });
+    drawRoamer(mockCtx, role, { time: 200, frame: 4, selected: true });
     assert.ok(ops.length > 5, 'drawRoamer should draw character pixels');
   }
+  assert.ok(seenActivities.size >= 4, 'idle agents should cycle through multiple random idle behaviours');
 });
+
+test('pickActiveWork auto-refreshes to the active work item when work starts or updates', () => {
+  const works = [
+    { workId: 'feat-new', updatedAt: '2026-10-22T02:00:00.000Z', done: false },
+    { workId: 'feat-old', updatedAt: '2026-10-21T01:00:00.000Z', done: true },
+  ];
+
+  // Initial load with no work selected selects the active work item
+  const init = pickActiveWork(works, { currentWorkId: null });
+  assert.equal(init.workId, 'feat-new');
+  assert.equal(init.switched, true);
+
+  // Stale completed work item in URL automatically switches to active work item
+  const fromDone = pickActiveWork(works, { currentWorkId: 'feat-old', userSelected: false, lastTopKey: init.topKey });
+  assert.equal(fromDone.workId, 'feat-new');
+  assert.equal(fromDone.switched, true);
+
+  // Manual user selection stays on the chosen work item while no new events arrive
+  const pinned = pickActiveWork(works, { currentWorkId: 'feat-old', userSelected: true, lastTopKey: init.topKey });
+  assert.equal(pinned.workId, 'feat-old');
+  assert.equal(pinned.switched, false);
+
+  // New event on an active work item overrides manual pin and switches to the active work item
+  const updatedWorks = [
+    { workId: 'feat-new', updatedAt: '2026-10-22T02:05:00.000Z', done: false },
+    { workId: 'feat-old', updatedAt: '2026-10-21T01:00:00.000Z', done: true },
+  ];
+  const autoSwitched = pickActiveWork(updatedWorks, {
+    currentWorkId: 'feat-old',
+    userSelected: true,
+    lastTopKey: init.topKey,
+  });
+  assert.equal(autoSwitched.workId, 'feat-new');
+  assert.equal(autoSwitched.switched, true);
+  assert.equal(autoSwitched.userSelected, false);
+});
+
 
