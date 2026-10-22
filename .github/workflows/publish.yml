@@ -24,4 +24,12 @@ jobs:
         run: npm install -g npm@latest
       - run: npm test
       - name: Publish to npm via OIDC Trusted Publisher
-        run: npm publish --provenance --access public
+        run: |
+          for attempt in 1 2 3; do
+            if npm publish --provenance --access public; then
+              exit 0
+            fi
+            echo "Publish attempt $attempt failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1

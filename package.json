@@ -22,7 +22,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tickoalcantara12/alcantara-ai-teams.git"
+    "url": "git+https://github.com/tickoalcantara12/alcantara-ai-teams.git"
   },
   "homepage": "https://github.com/tickoalcantara12/alcantara-ai-teams#readme",
   "bugs": {
