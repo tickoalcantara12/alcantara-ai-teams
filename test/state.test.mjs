@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createEvent } from '../src/events.mjs';
 import { reduceEvents, STALE_AFTER_MS, RECENT_EVENTS_LIMIT } from '../dashboard/state.mjs';
 import { createDemoSource, CYCLE_SECONDS, DEMO_WORK_ID } from '../dashboard/demo.mjs';
-import { ROLES, IDLE_ACTIVITIES, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from '../dashboard/public/sprites.js';
+import { ROLES, IDLE_ACTIVITIES, drawClock, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from '../dashboard/public/sprites.js';
 
 const T0 = Date.parse('2026-10-16T05:00:00.000Z');
 let tick = 0;
@@ -246,5 +246,25 @@ test('pickActiveWork auto-refreshes to the active work item when work starts or 
   assert.equal(autoSwitched.switched, true);
   assert.equal(autoSwitched.userSelected, false);
 });
+
+test('drawClock renders real-time analog hands and digital HH:MM readout', () => {
+  const capture = (date) => {
+    const ops = [];
+    const mockCtx = {
+      fillStyle: '',
+      fillRect(x, y, w, h) {
+        ops.push(`${this.fillStyle}:${x},${y},${w},${h}`);
+      },
+    };
+    drawClock(mockCtx, date);
+    return ops;
+  };
+
+  const t1 = capture(new Date(2026, 9, 22, 9, 15, 0));
+  const t2 = capture(new Date(2026, 9, 22, 14, 48, 35));
+  assert.ok(t1.length > 30);
+  assert.notDeepEqual(t1, t2, 'clock pixels should change as real time changes');
+});
+
 
 

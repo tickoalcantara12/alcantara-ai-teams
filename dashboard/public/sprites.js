@@ -81,7 +81,7 @@ export function drawRoom(ctx) {
 
   for (const wx of [24, 316]) drawWindow(ctx, wx, 14);
   drawWhiteboard(ctx, 144, 10);
-  drawClock(ctx, 262, 22);
+  drawClock(ctx);
 
   // Wooden floor with staggered plank seams.
   px(ctx, 0, WALL_H, W, H - WALL_H, '#b9824f');
@@ -131,13 +131,85 @@ function drawWhiteboard(ctx, x, y) {
   px(ctx, x + 30, y + 40, 36, 2, '#6d7884');
 }
 
-function drawClock(ctx, x, y) {
-  px(ctx, x + 2, y, 7, 11, '#f4f1ea');
-  px(ctx, x, y + 2, 11, 7, '#f4f1ea');
-  px(ctx, x + 1, y + 1, 9, 9, '#f4f1ea');
-  outline(ctx, x + 1, y + 1, 9, 9, '#3e4652');
-  px(ctx, x + 5, y + 3, 1, 3, '#3e4652');
-  px(ctx, x + 5, y + 5, 3, 1, '#3e4652');
+const DIGITS_3X5 = {
+  '0': ['###', '#.#', '#.#', '#.#', '###'],
+  '1': ['.#.', '##.', '.#.', '.#.', '###'],
+  '2': ['###', '..#', '###', '#..', '###'],
+  '3': ['###', '..#', '###', '..#', '###'],
+  '4': ['#.#', '#.#', '###', '..#', '..#'],
+  '5': ['###', '#..', '###', '..#', '###'],
+  '6': ['###', '#..', '###', '#.#', '###'],
+  '7': ['###', '..#', '..#', '..#', '..#'],
+  '8': ['###', '#.#', '###', '#.#', '###'],
+  '9': ['###', '#.#', '###', '..#', '###'],
+};
+
+function drawHand(ctx, cx, cy, angleRad, length, color) {
+  const dx = Math.sin(angleRad);
+  const dy = -Math.cos(angleRad);
+  for (let r = 1; r <= length; r += 1) {
+    px(ctx, Math.round(cx + dx * r), Math.round(cy + dy * r), 1, 1, color);
+  }
+}
+
+/**
+ * Draws the wall clock with real-time analog hour/minute/second hands and a digital HH:MM readout below.
+ */
+export function drawClock(ctx, date = new Date(), x = 266, y = 14) {
+  const d = date instanceof Date ? date : new Date(date);
+  const hours = d.getHours();
+  const minutes = d.getMinutes();
+  const seconds = d.getSeconds();
+
+  const cx = x + 9;
+  const cy = y + 9;
+
+  // Rounded 19x19 analog clock rim and face
+  px(ctx, x + 4, y, 11, 19, '#3e4652');
+  px(ctx, x, y + 4, 19, 11, '#3e4652');
+  px(ctx, x + 2, y + 1, 15, 17, '#3e4652');
+  px(ctx, x + 1, y + 2, 17, 15, '#3e4652');
+
+  px(ctx, x + 4, y + 1, 11, 17, '#f4f1ea');
+  px(ctx, x + 1, y + 4, 17, 11, '#f4f1ea');
+  px(ctx, x + 2, y + 2, 15, 15, '#f4f1ea');
+
+  // 12, 3, 6, 9 o'clock tick marks
+  px(ctx, cx, y + 2, 1, 1, '#8a96a3');
+  px(ctx, x + 16, cy, 1, 1, '#8a96a3');
+  px(ctx, cx, y + 16, 1, 1, '#8a96a3');
+  px(ctx, x + 2, cy, 1, 1, '#8a96a3');
+
+  // Hour, minute, and second hands
+  const hourAngle = (((hours % 12) + minutes / 60) / 12) * Math.PI * 2;
+  const minAngle = ((minutes + seconds / 60) / 60) * Math.PI * 2;
+  const secAngle = (seconds / 60) * Math.PI * 2;
+
+  drawHand(ctx, cx, cy, hourAngle, 4, '#1f2433');
+  drawHand(ctx, cx, cy, minAngle, 6, '#3e4652');
+  drawHand(ctx, cx, cy, secAngle, 6, '#e05d5d');
+  px(ctx, cx, cy, 1, 1, '#1f2433');
+
+  // Digital HH:MM readout below analog clock (21x9 pixel LED panel)
+  const bx = cx - 10;
+  const by = y + 21;
+  px(ctx, bx, by, 21, 9, '#151922');
+  outline(ctx, bx, by, 21, 9, '#2f3647');
+
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  const ledColor = '#5ce1e6';
+
+  grid(ctx, DIGITS_3X5[hh[0]], bx + 2, by + 2, { '#': ledColor });
+  grid(ctx, DIGITS_3X5[hh[1]], bx + 6, by + 2, { '#': ledColor });
+
+  // Blinking colon on even seconds
+  const colonColor = seconds % 2 === 0 ? ledColor : '#294854';
+  px(ctx, bx + 10, by + 3, 1, 1, colonColor);
+  px(ctx, bx + 10, by + 5, 1, 1, colonColor);
+
+  grid(ctx, DIGITS_3X5[mm[0]], bx + 12, by + 2, { '#': ledColor });
+  grid(ctx, DIGITS_3X5[mm[1]], bx + 16, by + 2, { '#': ledColor });
 }
 
 function drawPlant(ctx, x, y) {

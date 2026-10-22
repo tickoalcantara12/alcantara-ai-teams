@@ -1,4 +1,4 @@
-import { W, H, DESK_TOP, ROLES, drawRoom, drawStation, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from './sprites.js';
+import { W, H, DESK_TOP, ROLES, drawRoom, drawClock, drawStation, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from './sprites.js';
 
 const LOOP_LIMIT = 3;
 const HANDOFF_BUBBLE_MS = 6000;
@@ -247,6 +247,7 @@ function draw(time) {
   const frame = Math.floor(time / FRAME_MS);
   const now = serverNow();
   ctx.drawImage(background, 0, 0);
+  drawClock(ctx, new Date());
 
   const roamers = [];
   for (const role of ROLES) {
