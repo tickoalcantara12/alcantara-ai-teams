@@ -1,7 +1,24 @@
-import { W, H, DESK_TOP, ROLES, drawRoom, drawClock, drawStation, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from './sprites.js';
+import {
+  W,
+  H,
+  DESK_TOP,
+  ROLES,
+  drawRoom,
+  drawClock,
+  drawStation,
+  isRoaming,
+  getRoamerPose,
+  drawRoamer,
+  roleAt,
+  pickActiveWork,
+  createArcadeAudio,
+  isAgentFree,
+  generateAgentReply,
+} from './sprites.js';
 
 const LOOP_LIMIT = 3;
 const HANDOFF_BUBBLE_MS = 6000;
+const CHAT_BUBBLE_MS = 5000;
 const WORKS_REFRESH_MS = 2500;
 const FRAME_MS = 280;
 
@@ -20,6 +37,12 @@ const els = {
   tags: $('tags'),
   empty: $('empty'),
   select: $('work-select'),
+  dropdown: $('work-dropdown'),
+  trigger: $('work-trigger'),
+  triggerLabel: $('work-trigger-label'),
+  menu: $('work-menu'),
+  soundToggle: $('sound-toggle'),
+  soundLabel: $('sound-label'),
   connection: $('connection'),
   connectionText: $('connection-text'),
   summary: $('work-summary'),
@@ -32,8 +55,17 @@ const els = {
   panelLoop: $('panel-loop'),
   panelVerdict: $('panel-verdict'),
   panelUpdated: $('panel-updated'),
+  chatBadge: $('chat-badge'),
+  chatMessages: $('chat-messages'),
+  chatPrompts: $('chat-prompts'),
+  chatForm: $('chat-form'),
+  chatInput: $('chat-input'),
+  chatSend: $('chat-send'),
   activityList: $('activity-list'),
 };
+
+const savedSound = localStorage.getItem('ai-team-sfx');
+const sfx = createArcadeAudio({ enabled: savedSound === null ? true : savedSound === '1' });
 
 const app = {
   works: [],
@@ -45,6 +77,9 @@ const app = {
   lastTime: 0,
   userSelected: false,
   lastTopKey: null,
+  lastEventCount: 0,
+  chats: Object.fromEntries(ROLES.map((r) => [r.id, []])),
+  chatUntil: {},
 };
 
 const ctx = els.canvas.getContext('2d');
@@ -82,7 +117,11 @@ els.canvas.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.target instanceof HTMLSelectElement) return;
+  if (event.key === 'Escape' && els.menu && !els.menu.hidden) {
+    closeDropdown();
+    return;
+  }
+  if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
   const index = ROLES.findIndex((r) => r.id === app.selected);
   const next = (index + (event.key === 'ArrowRight' ? 1 : -1) + ROLES.length) % ROLES.length;
@@ -95,8 +134,81 @@ els.select.addEventListener('change', () => {
   openWork(els.select.value);
 });
 
+if (els.trigger) {
+  els.trigger.addEventListener('click', () => {
+    if (els.trigger.disabled) return;
+    const willOpen = els.menu.hidden;
+    els.menu.hidden = !willOpen;
+    els.trigger.setAttribute('aria-expanded', String(willOpen));
+    sfx.play('select');
+  });
+}
+
+document.addEventListener('click', (event) => {
+  if (els.dropdown && !els.dropdown.contains(event.target)) {
+    closeDropdown();
+  }
+});
+
+function closeDropdown() {
+  if (!els.menu || !els.trigger) return;
+  els.menu.hidden = true;
+  els.trigger.setAttribute('aria-expanded', 'false');
+}
+
+function updateSoundButton() {
+  if (!els.soundToggle || !els.soundLabel) return;
+  els.soundToggle.setAttribute('aria-pressed', String(sfx.enabled));
+  els.soundLabel.textContent = sfx.enabled ? '8-bit SFX: ON' : '8-bit SFX: OFF';
+}
+
+if (els.soundToggle) {
+  updateSoundButton();
+  els.soundToggle.addEventListener('click', () => {
+    const on = sfx.toggle();
+    localStorage.setItem('ai-team-sfx', on ? '1' : '0');
+    updateSoundButton();
+  });
+}
+
+if (els.chatForm) {
+  els.chatForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    sendChatMessage(els.chatInput.value);
+    els.chatInput.value = '';
+  });
+}
+
+if (els.chatPrompts) {
+  els.chatPrompts.addEventListener('click', (event) => {
+    const btn = event.target.closest('.chat-chip');
+    if (!btn || btn.disabled) return;
+    sendChatMessage(btn.dataset.prompt || '');
+  });
+}
+
+function sendChatMessage(rawText) {
+  const text = String(rawText ?? '').trim();
+  if (!text) return;
+  const roleId = app.selected;
+  const agent = agentOf(roleId);
+  if (!isAgentFree(agent)) return;
+
+  const history = app.chats[roleId];
+  history.push({ sender: 'user', text });
+  const reply = generateAgentReply(roleId, text, app.snapshot?.state);
+  history.push({ sender: 'agent', text: reply });
+  if (history.length > 20) history.splice(0, history.length - 20);
+
+  app.chatUntil[roleId] = Date.now() + CHAT_BUBBLE_MS;
+  sfx.play('chat');
+  renderChat();
+}
+
 function select(roleId) {
+  const changed = app.selected !== roleId;
   app.selected = roleId;
+  if (changed) sfx.play('select');
   renderPanel();
   renderTags();
 }
@@ -167,6 +279,53 @@ function renderPanel() {
   }
   els.panelAlert.textContent = alert;
   els.panelAlert.hidden = !alert;
+  renderChat();
+}
+
+function renderChat() {
+  if (!els.chatMessages) return;
+  const role = ROLES.find((r) => r.id === app.selected);
+  const agent = agentOf(role.id);
+  const free = isAgentFree(agent);
+
+  if (els.chatBadge) {
+    els.chatBadge.dataset.free = String(free);
+    els.chatBadge.textContent = free ? 'Free to chat' : 'Busy working';
+  }
+  if (els.chatInput) {
+    els.chatInput.disabled = !free;
+    els.chatInput.placeholder = free
+      ? `Chat with ${role.name}…`
+      : `${role.name} is busy — select a free agent to chat`;
+  }
+  if (els.chatSend) els.chatSend.disabled = !free;
+  if (els.chatPrompts) {
+    for (const chip of els.chatPrompts.querySelectorAll('.chat-chip')) {
+      chip.disabled = !free;
+    }
+  }
+
+  const history = app.chats[role.id] ?? [];
+  if (history.length === 0) {
+    const greeting = document.createElement('div');
+    greeting.className = 'chat-msg';
+    greeting.dataset.sender = 'agent';
+    greeting.textContent = free
+      ? generateAgentReply(role.id, 'hi', app.snapshot?.state)
+      : `${role.name} is focused on "${agent?.task || app.snapshot?.state?.stage || 'current work'}". Pick any idle agent strolling the office to chat!`;
+    els.chatMessages.replaceChildren(greeting);
+    return;
+  }
+
+  const nodes = history.map((msg) => {
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    div.dataset.sender = msg.sender;
+    div.textContent = msg.sender === 'agent' ? `${role.name}: ${msg.text}` : msg.text;
+    return div;
+  });
+  els.chatMessages.replaceChildren(...nodes);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
 
 function formatEventTag(e) {
@@ -261,25 +420,47 @@ function draw(time) {
 
   for (const { role, pose } of roamers) {
     if (pose.y < DESK_TOP) {
-      drawRoamer(ctx, role, { time, frame, selected: role.id === app.selected });
+      const chatActive = (app.chatUntil[role.id] ?? 0) > Date.now();
+      drawRoamer(ctx, role, { time, frame, selected: role.id === app.selected, chatActive });
     }
   }
   for (const role of ROLES) {
     const agent = agentOf(role.id);
     const handoffActive = Boolean(agent?.handoff) && now - Date.parse(agent.handoff.at) < HANDOFF_BUBBLE_MS;
-    drawStation(ctx, role, agent, { frame, selected: role.id === app.selected, handoffActive });
+    const chatActive = (app.chatUntil[role.id] ?? 0) > Date.now();
+    drawStation(ctx, role, agent, { frame, selected: role.id === app.selected, handoffActive, chatActive });
   }
   for (const { role, pose } of roamers) {
     if (pose.y >= DESK_TOP) {
-      drawRoamer(ctx, role, { time, frame, selected: role.id === app.selected });
+      const chatActive = (app.chatUntil[role.id] ?? 0) > Date.now();
+      drawRoamer(ctx, role, { time, frame, selected: role.id === app.selected, chatActive });
     }
   }
   requestAnimationFrame(draw);
 }
 
+function playEventSound(prevCount, nextState) {
+  const count = nextState?.eventCount ?? 0;
+  if (!nextState || count <= prevCount) return;
+  const latest = nextState.recentEvents?.[0];
+  if (!latest) return;
+  if (latest.event === 'done') sfx.play('done');
+  else if (latest.event === 'handoff') sfx.play('handoff');
+  else if (latest.event === 'gate_waiting' || latest.event === 'escalated') sfx.play('waiting');
+  else if (latest.event === 'verdict') {
+    const bad = ['CHANGES_REQUESTED', 'BLOCKED', 'FAIL', 'GAPS_FOUND'].includes(latest.verdict);
+    sfx.play(bad ? 'blocked' : 'verdict');
+  } else if (latest.event === 'started' || latest.event === 'loop') {
+    sfx.play('started');
+  }
+}
+
 function applySnapshot(snapshot) {
+  const prevCount = app.lastEventCount;
   app.snapshot = snapshot;
+  app.lastEventCount = snapshot?.state?.eventCount ?? 0;
   app.receivedAt = Date.now();
+  if (prevCount > 0) playEventSound(prevCount, snapshot?.state);
   renderTags();
   renderPanel();
   renderSummary();
@@ -311,22 +492,65 @@ function openWork(workId) {
 
 function renderWorkOptions() {
   const current = app.workId;
+  const items = [...app.works];
+  if (current && !items.some((w) => w.workId === current)) {
+    items.unshift({ workId: current, done: false, noEvents: true });
+  }
+
   els.select.replaceChildren(
-    ...app.works.map((work) => {
+    ...items.map((work) => {
       const option = document.createElement('option');
       option.value = work.workId;
-      option.textContent = work.done ? `${work.workId} (done)` : `${work.workId} (active)`;
+      option.textContent = work.noEvents
+        ? `${work.workId} (no events)`
+        : work.done
+          ? `${work.workId} (done)`
+          : `${work.workId} (active)`;
       return option;
     }),
   );
-  if (current && !app.works.some((w) => w.workId === current)) {
-    const option = document.createElement('option');
-    option.value = current;
-    option.textContent = `${current} (no events)`;
-    els.select.prepend(option);
-  }
   if (current) els.select.value = current;
-  els.select.disabled = els.select.options.length === 0;
+  els.select.disabled = items.length === 0;
+
+  if (els.trigger && els.triggerLabel && els.menu) {
+    els.trigger.disabled = items.length === 0;
+    const activeItem = items.find((w) => w.workId === current) ?? items[0];
+    els.triggerLabel.textContent = activeItem
+      ? activeItem.noEvents
+        ? `${activeItem.workId} (no events)`
+        : activeItem.done
+          ? `${activeItem.workId} (done)`
+          : `${activeItem.workId} (active)`
+      : 'No work items';
+
+    els.menu.replaceChildren(
+      ...items.map((work) => {
+        const li = document.createElement('li');
+        li.className = 'work-option';
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', String(work.workId === current));
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = work.workId;
+
+        const tagSpan = document.createElement('span');
+        tagSpan.className = 'work-option-tag';
+        tagSpan.dataset.done = String(Boolean(work.done));
+        tagSpan.textContent = work.noEvents ? 'new' : work.done ? 'done' : 'active';
+
+        li.append(nameSpan, tagSpan);
+        li.addEventListener('click', () => {
+          app.userSelected = true;
+          closeDropdown();
+          sfx.play('select');
+          openWork(work.workId);
+          renderWorkOptions();
+        });
+        return li;
+      }),
+    );
+  }
+
   els.empty.hidden = app.works.length > 0 || Boolean(current);
 }
 

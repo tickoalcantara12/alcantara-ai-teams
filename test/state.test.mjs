@@ -3,7 +3,20 @@ import assert from 'node:assert/strict';
 import { createEvent } from '../src/events.mjs';
 import { reduceEvents, STALE_AFTER_MS, RECENT_EVENTS_LIMIT } from '../dashboard/state.mjs';
 import { createDemoSource, CYCLE_SECONDS, DEMO_WORK_ID } from '../dashboard/demo.mjs';
-import { ROLES, IDLE_ACTIVITIES, drawClock, isRoaming, getRoamerPose, drawRoamer, roleAt, pickActiveWork } from '../dashboard/public/sprites.js';
+import {
+  ROLES,
+  IDLE_ACTIVITIES,
+  SOUND_PRESETS,
+  drawClock,
+  isRoaming,
+  getRoamerPose,
+  drawRoamer,
+  roleAt,
+  pickActiveWork,
+  createArcadeAudio,
+  isAgentFree,
+  generateAgentReply,
+} from '../dashboard/public/sprites.js';
 
 const T0 = Date.parse('2026-10-16T05:00:00.000Z');
 let tick = 0;
@@ -265,6 +278,68 @@ test('drawClock renders real-time analog hands and digital HH:MM readout', () =>
   assert.ok(t1.length > 30);
   assert.notDeepEqual(t1, t2, 'clock pixels should change as real time changes');
 });
+
+test('createArcadeAudio synthesizes 80s 8-bit chiptune presets and respects mute toggle', () => {
+  const played = [];
+  const fakeContext = {
+    currentTime: 0,
+    state: 'running',
+    destination: {},
+    createOscillator() {
+      return {
+        type: 'square',
+        frequency: {
+          setValueAtTime(freq) {
+            played.push(freq);
+          },
+        },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+    },
+    createGain() {
+      return {
+        gain: {
+          setValueAtTime() {},
+          exponentialRampToValueAtTime() {},
+        },
+        connect() {},
+      };
+    },
+  };
+
+  const sfx = createArcadeAudio({ createContext: () => fakeContext, enabled: true });
+  for (const name of Object.keys(SOUND_PRESETS)) {
+    assert.equal(sfx.play(name), true, `should play ${name}`);
+  }
+  assert.ok(played.length >= 15);
+
+  const countBefore = played.length;
+  assert.equal(sfx.toggle(), false);
+  assert.equal(sfx.play('done'), false);
+  assert.equal(played.length, countBefore);
+});
+
+test('isAgentFree and generateAgentReply allow chatting with idle/free agents and report busy status when working', () => {
+  const state = reduceEvents([ev('architect', 'started', { stage: 'spec', message: 'writing spec' })], T0);
+  assert.equal(isAgentFree(state.agents.architect), false);
+  assert.equal(isAgentFree(state.agents.implementer), true);
+  assert.equal(isAgentFree(state.agents.qa), true);
+
+  const busyReply = generateAgentReply('architect', 'hello', state);
+  assert.match(busyReply, /currently working/i);
+
+  const greeting = generateAgentReply('implementer', 'hi!', state);
+  assert.match(greeting, /Architect is working on "feat-x"/);
+
+  const roleReply = generateAgentReply('security', 'what is your role?', state);
+  assert.match(roleReply, /Security Pentester/);
+
+  const statusReply = generateAgentReply('qa', 'any status update?', state);
+  assert.match(statusReply, /feat-x/);
+});
+
 
 
 

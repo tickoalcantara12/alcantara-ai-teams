@@ -349,7 +349,7 @@ export function getRoamerPose(roleId, timeMs = 0) {
 /**
  * Draws a roaming agent walking or performing a random idle behaviour on the office floor.
  */
-export function drawRoamer(ctx, role, { time = 0, frame = 0, selected = false } = {}) {
+export function drawRoamer(ctx, role, { time = 0, frame = 0, selected = false, chatActive = false } = {}) {
   const pose = getRoamerPose(role.id, time);
   const cx = pose.x;
   const stride = Math.floor(time / 150) % 4;
@@ -385,9 +385,22 @@ export function drawRoamer(ctx, role, { time = 0, frame = 0, selected = false } 
     drawIdleActivity(ctx, role.id, cx, top, pose.activity, frame);
   }
 
+  if (chatActive) {
+    drawChatBubble(ctx, cx, top - 16, frame);
+  }
+
   if (selected) {
     outline(ctx, cx - 11, top - 4, 22, 27, '#ffd166');
   }
+}
+
+function drawChatBubble(ctx, cx, y, frame) {
+  const bob = frame % 4 < 2 ? 0 : -1;
+  bubble(ctx, cx, y + bob, '#fff8e1', '#8a5a2b');
+  const w1 = 7 + (frame % 3);
+  const w2 = 5 + ((frame + 1) % 4);
+  px(ctx, cx - 4, y + 3 + bob, w1, 1, '#5a3d2b');
+  px(ctx, cx - 4, y + 6 + bob, w2, 1, '#8a5a33');
 }
 
 function drawIdleActivity(ctx, roleId, cx, top, activity, frame) {
@@ -471,7 +484,7 @@ function drawIdleActivity(ctx, roleId, cx, top, activity, frame) {
  * Draws one role's workstation: chair, character (when seated), desk, props, hands and status overlay.
  * `agent` is the reducer state for the role (or undefined before data arrives).
  */
-export function drawStation(ctx, role, agent, { frame, selected, handoffActive }) {
+export function drawStation(ctx, role, agent, { frame, selected, handoffActive, chatActive = false }) {
   const status = agent?.status ?? 'idle';
   const stale = Boolean(agent?.stale);
   const cx = role.x;
@@ -511,7 +524,8 @@ export function drawStation(ctx, role, agent, { frame, selected, handoffActive }
   }
 
   if (!roaming) {
-    drawOverlay(ctx, cx, CHAR_TOP - 15, { status, stale, handoffActive, frame });
+    if (chatActive) drawChatBubble(ctx, cx, CHAR_TOP - 15, frame);
+    else drawOverlay(ctx, cx, CHAR_TOP - 15, { status, stale, handoffActive, frame });
   }
 }
 
@@ -730,5 +744,211 @@ export function pickActiveWork(works, { currentWorkId = null, userSelected = fal
   }
   return { workId: currentWorkId, topKey, switched: false, userSelected };
 }
+
+/**
+ * 80s arcade 8-bit chiptune presets (frequency in Hz, duration in seconds, waveform type).
+ */
+export const SOUND_PRESETS = {
+  select: [
+    { freq: 523.25, dur: 0.045, type: 'square' },
+    { freq: 783.99, dur: 0.06, type: 'square' },
+  ],
+  started: [
+    { freq: 440, dur: 0.055, type: 'square' },
+    { freq: 554.37, dur: 0.055, type: 'square' },
+    { freq: 659.25, dur: 0.09, type: 'square' },
+  ],
+  handoff: [
+    { freq: 587.33, dur: 0.05, type: 'triangle' },
+    { freq: 880, dur: 0.09, type: 'square' },
+  ],
+  waiting: [
+    { freq: 392, dur: 0.08, type: 'square' },
+    { freq: 311.13, dur: 0.12, type: 'square' },
+  ],
+  blocked: [
+    { freq: 220, dur: 0.1, type: 'sawtooth' },
+    { freq: 164.81, dur: 0.16, type: 'sawtooth' },
+  ],
+  verdict: [
+    { freq: 659.25, dur: 0.05, type: 'square' },
+    { freq: 987.77, dur: 0.11, type: 'square' },
+  ],
+  done: [
+    { freq: 523.25, dur: 0.07, type: 'square' },
+    { freq: 659.25, dur: 0.07, type: 'square' },
+    { freq: 783.99, dur: 0.07, type: 'square' },
+    { freq: 1046.5, dur: 0.18, type: 'square' },
+  ],
+  chat: [
+    { freq: 698.46, dur: 0.035, type: 'square' },
+    { freq: 880, dur: 0.04, type: 'triangle' },
+    { freq: 783.99, dur: 0.045, type: 'square' },
+  ],
+};
+
+/**
+ * Creates an 80s arcade chiptune sound controller using the Web Audio API.
+ */
+export function createArcadeAudio({ createContext, enabled = true } = {}) {
+  let ctx = null;
+  let isEnabled = Boolean(enabled);
+
+  function getCtx() {
+    if (ctx) return ctx;
+    const factory =
+      createContext ??
+      (() => {
+        const Ctor = globalThis.AudioContext || globalThis.webkitAudioContext;
+        return Ctor ? new Ctor() : null;
+      });
+    ctx = factory();
+    return ctx;
+  }
+
+  return {
+    get enabled() {
+      return isEnabled;
+    },
+    setEnabled(val) {
+      isEnabled = Boolean(val);
+      return isEnabled;
+    },
+    toggle() {
+      isEnabled = !isEnabled;
+      if (isEnabled) this.play('select');
+      return isEnabled;
+    },
+    play(effect = 'select') {
+      if (!isEnabled) return false;
+      const notes = SOUND_PRESETS[effect] ?? SOUND_PRESETS.select;
+      const audio = getCtx();
+      if (!audio) return false;
+      try {
+        if (audio.state === 'suspended' && typeof audio.resume === 'function') {
+          audio.resume();
+        }
+        let offset = audio.currentTime ?? 0;
+        for (const note of notes) {
+          const osc = audio.createOscillator();
+          const gain = audio.createGain();
+          osc.type = note.type ?? 'square';
+          osc.frequency.setValueAtTime(note.freq, offset);
+          gain.gain.setValueAtTime(0.08, offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, offset + note.dur);
+          osc.connect(gain);
+          gain.connect(audio.destination);
+          osc.start(offset);
+          osc.stop(offset + note.dur);
+          offset += note.dur + 0.012;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+/**
+ * Returns true when an agent has no active workload (`idle` or `done`) and is free to chat.
+ */
+export function isAgentFree(agent) {
+  const status = agent?.status ?? 'idle';
+  return status === 'idle' || status === 'done';
+}
+
+const ROLE_CHAT_PERSONAS = {
+  architect: {
+    greeting: "Hey! I'm free right now—just sketching system boundaries by the whiteboard.",
+    roleInfo: 'I design specs, component boundaries, ADRs, and test-first task breakdowns before implementation starts.',
+    idleThoughts: [
+      'Everything starts with a crisp spec and clear acceptance criteria.',
+      'Simplicity first—the best architecture is the smallest one that solves the real problem.',
+      'Enjoying a quick coffee while keeping an eye on the system diagram.',
+    ],
+  },
+  implementer: {
+    greeting: "Hey there! Taking a breather between coding sprints—what's on your mind?",
+    roleInfo: 'I turn approved tasks into clean, minimal, test-first code changes that follow existing project conventions.',
+    idleThoughts: [
+      'Always write the failing test first—it keeps every change laser-focused.',
+      'No over-engineering on my watch: small diffs, zero unrelated refactors.',
+      'Recharging with some 8-bit tunes before the next handoff arrives!',
+    ],
+  },
+  reviewer: {
+    greeting: "Hello! My review queue is clear at the moment—happy to chat.",
+    roleInfo: 'I audit diffs against the spec and constitution for correctness, edge cases, maintainability, and architecture.',
+    idleThoughts: [
+      'I love a diff where every line traces directly back to a requirement.',
+      'Comments should explain WHY, never WHAT.',
+      'Grabbing a stretch break before the next code review lands on my desk.',
+    ],
+  },
+  security: {
+    greeting: "Hey! No active pentest running right now—all perimeters look quiet.",
+    roleInfo: 'I threat-model changes, audit authz/authn, input validation, secrets handling, and injection surfaces.',
+    idleThoughts: [
+      'Never trust external input, and never let secrets near a log or commit.',
+      'Defense in depth—checking CSP, host headers, and path traversal guards is second nature.',
+      'Doing a casual lap around the office while monitoring the security radar.',
+    ],
+  },
+  qa: {
+    greeting: "Hi! All test suites are green on my end right now—free to chat!",
+    roleInfo: 'I verify every requirement end-to-end against acceptance criteria, edge cases, and regression suites.',
+    idleThoughts: [
+      'If a requirement does not have a passing test, it is not shipped yet!',
+      'Happy paths are nice, but boundary conditions and error paths are where bugs hide.',
+      'Taking a quick stroll around the lounge until the next build is ready for QA.',
+    ],
+  },
+};
+
+/**
+ * Generates an in-character reply from a free/idle agent using their persona and current work context.
+ */
+export function generateAgentReply(roleId, userMessage = '', state = null) {
+  const persona = ROLE_CHAT_PERSONAS[roleId] ?? ROLE_CHAT_PERSONAS.architect;
+  const role = ROLES.find((r) => r.id === roleId) ?? ROLES[0];
+  const agent = state?.agents?.[roleId];
+
+  if (!isAgentFree(agent)) {
+    return `${role.name} is currently ${agent.status} on "${agent.task || state?.stage || 'active task'}"—chat again once they're free!`;
+  }
+
+  const text = String(userMessage ?? '').trim().toLowerCase();
+  const activeRole = ROLES.find((r) => state?.agents?.[r.id]?.status === 'working');
+  const workContext = state?.workId
+    ? state.done
+      ? `Work item "${state.workId}" is complete${state.summary ? ` (${state.summary})` : ''}.`
+      : activeRole
+        ? `Right now ${activeRole.name} is working on "${state.workId}" (stage: ${state.stage ?? 'in progress'}).`
+        : `We're tracking "${state.workId}" (stage: ${state.stage ?? 'idle'}).`
+    : 'There are no active work items in the queue yet.';
+
+  if (!text || /^(hi|hello|hey|yo|sup|good\s)/i.test(text)) {
+    return `${persona.greeting} ${workContext}`;
+  }
+  if (/role|who are you|what do you do|job|responsibil/i.test(text)) {
+    return `I'm the ${role.title} (${role.name}). ${persona.roleInfo}`;
+  }
+  if (/status|work|progress|queue|busy|doing|update|stage/i.test(text)) {
+    const myLast = agent?.verdict
+      ? `My latest verdict was ${agent.verdict}.`
+      : agent?.task
+        ? `My last task was "${agent.task}".`
+        : "I haven't been called into this work item yet.";
+    return `${workContext} ${myLast}`;
+  }
+  if (/coffee|break|walk|idle|free|relax|music/i.test(text)) {
+    const pose = getRoamerPose(roleId, Date.now());
+    return `Enjoying some free time around the office (currently ${pose.moving ? 'strolling' : `on a ${pose.activity} break`}) while waiting for my next handoff!`;
+  }
+  const idx = Math.abs(hash32(text.length * 97 + (text.charCodeAt(0) || 0))) % persona.idleThoughts.length;
+  return `${persona.idleThoughts[idx]} (${workContext})`;
+}
+
 
 

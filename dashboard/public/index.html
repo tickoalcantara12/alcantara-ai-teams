@@ -11,12 +11,23 @@
 <body>
   <header class="topbar">
     <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>AI Dev Team Office</h1>
-    <label class="work-picker" for="work-select">
-      <span>Work item</span>
-      <select id="work-select" disabled>
-        <option>Loading…</option>
-      </select>
-    </label>
+    <div class="work-picker">
+      <label for="work-select">Work item</label>
+      <div id="work-dropdown" class="work-dropdown">
+        <button type="button" id="work-trigger" class="work-trigger" aria-haspopup="listbox" aria-expanded="false" disabled>
+          <span id="work-trigger-label">Loading…</span>
+          <span class="work-trigger-caret" aria-hidden="true">▾</span>
+        </button>
+        <ul id="work-menu" class="work-menu" role="listbox" aria-label="Work items" hidden></ul>
+        <select id="work-select" class="sr-only" tabindex="-1" aria-hidden="true" disabled>
+          <option>Loading…</option>
+        </select>
+      </div>
+    </div>
+    <button type="button" id="sound-toggle" class="sound-toggle" aria-pressed="true" title="Toggle 80s 8-bit sound effects">
+      <span id="sound-icon" aria-hidden="true">🕹️</span>
+      <span id="sound-label">8-bit SFX: ON</span>
+    </button>
     <p id="connection" class="connection" data-state="connecting" role="status" aria-live="polite">
       <span class="dot" aria-hidden="true"></span><span id="connection-text">Connecting</span>
     </p>
@@ -50,6 +61,22 @@
         <div><dt>Last update</dt><dd id="panel-updated">—</dd></div>
       </dl>
       <p class="panel-hint">Click a desk or use ← → to switch.</p>
+      <section id="chat-section" class="chat-section" aria-labelledby="chat-heading">
+        <div class="chat-head">
+          <h3 id="chat-heading" class="activity-heading">Chat with agent</h3>
+          <span id="chat-badge" class="chat-badge" data-free="true">Free to chat</span>
+        </div>
+        <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
+        <div id="chat-prompts" class="chat-prompts">
+          <button type="button" class="chat-chip" data-prompt="Hey! How is it going?">👋 Say hi</button>
+          <button type="button" class="chat-chip" data-prompt="What is your role?">🎯 Role</button>
+          <button type="button" class="chat-chip" data-prompt="Any status update?">📋 Status</button>
+        </div>
+        <form id="chat-form" class="chat-form" autocomplete="off">
+          <input id="chat-input" class="chat-input" type="text" maxlength="160" placeholder="Message idle agent…" aria-label="Message agent">
+          <button type="submit" id="chat-send" class="chat-send">Send</button>
+        </form>
+      </section>
       <section class="activity" aria-labelledby="activity-heading">
         <h3 id="activity-heading" class="activity-heading">Recent activity</h3>
         <ol id="activity-list" class="activity-list">
