@@ -39,6 +39,7 @@ When run in an interactive terminal, `init` inspects your repository (`package.j
 
 It then:
 - Installs the 5 roles, skills, workflows/commands, and local event runner for your chosen tool(s)
+- Configures your selected MCP servers in each target tool's project MCP config file (`.agents/mcp_config.json` for Antigravity, `.mcp.json` for Claude Code, `.cursor/mcp.json` for Cursor) using safe `${ENV_VAR}` placeholders
 - Generates `.ai-team/constitution.md` pre-populated with your project's stack, MCP integrations, quality gates, and requirements so all 5 agents have full context immediately
 - Creates `.ai-team/.gitkeep` and adds `.ai-team/**/events.jsonl` to `.gitignore`
 
@@ -72,9 +73,9 @@ What gets created in your project:
 
 | Tool | Files |
 |---|---|
-| Claude Code | `.claude/agents/<role>.md`, `.claude/skills/<skill>/SKILL.md`, `.claude/commands/<command>.md`, `CLAUDE.md`, `.claude/ai-team/` (including `event.mjs`) |
-| Antigravity | `.agents/rules/ai-dev-team.md`, `.agents/skills/<role or skill>/SKILL.md`, `.agents/workflows/<command>.md`, `.agents/AGENTS.md`, `.agents/ai-team/` (including `event.mjs`) |
-| Cursor | `.cursor/rules/ai-team-*.mdc`, `.cursor/commands/<command>.md`, `.cursor/ai-team/` (including `event.mjs`) |
+| Claude Code | `.claude/agents/<role>.md`, `.claude/skills/<skill>/SKILL.md`, `.claude/commands/<command>.md`, `CLAUDE.md`, `.claude/ai-team/` (including `event.mjs`), `.mcp.json` (on `init` / `mcp add`) |
+| Antigravity | `.agents/rules/ai-dev-team.md`, `.agents/skills/<role or skill>/SKILL.md`, `.agents/workflows/<command>.md`, `.agents/AGENTS.md`, `.agents/ai-team/` (including `event.mjs`), `.agents/mcp_config.json` (on `init` / `mcp add`) |
+| Cursor | `.cursor/rules/ai-team-*.mdc`, `.cursor/commands/<command>.md`, `.cursor/ai-team/` (including `event.mjs`), `.cursor/mcp.json` (on `init` / `mcp add`) |
 | Workspace (`init`) | `.ai-team/constitution.md` (project overview, tech stack, MCP servers, quality gates, rules), `.ai-team/.gitkeep`, `.gitignore` entry |
 
 After installing, restart or reload your tool if the new commands do not show up. Command and skill discovery depends on the tool and its version.
@@ -113,8 +114,14 @@ Open your project in **Antigravity**, **Claude Code**, or **Cursor**, and type a
 You can run CLI commands via `npx alcantara-ai-teams <cmd>` (or `npx github:tickoalcantara12/alcantara-ai-teams <cmd>`):
 
 ```bash
-# Initialize project (interactive setup wizard + scaffolds .ai-team/ & .gitignore)
+# Initialize project (interactive setup wizard + scaffolds .ai-team/, MCP configs & .gitignore)
 npx alcantara-ai-teams init
+
+# Manage MCP servers (15 built-in presets + custom stdio/HTTP servers)
+npx alcantara-ai-teams mcp list --presets
+npx alcantara-ai-teams mcp add github postgres playwright
+npx alcantara-ai-teams mcp add my-mcp --url https://mcp.example.com/mcp
+npx alcantara-ai-teams mcp remove postgres
 
 # Check active work items and role statuses in the terminal
 npx alcantara-ai-teams status

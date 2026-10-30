@@ -9,7 +9,12 @@ import {
   detectTargets,
   detectProjectInfo,
   parseTargetSelection,
+  addMcpServers,
+  removeMcpServers,
+  listMcpServers,
+  MCP_PRESETS,
 } from '../src/install.mjs';
+import { parseCliArgs, parseCliEnv } from '../src/mcp.mjs';
 import { TARGETS } from '../src/targets.mjs';
 import { appendEvent, AGENTS, EVENT_TYPES } from '../src/events.mjs';
 
@@ -17,6 +22,9 @@ const USAGE = `Usage:
   ai-dev-team init [--target <${Object.keys(TARGETS).join('|')}>] [--all] [--yes] [--dir <path>] [--force] [--dry-run]
   ai-dev-team install --target <${Object.keys(TARGETS).join('|')}> [--all] [--dir <path>] [--force] [--dry-run]
   ai-dev-team uninstall --target <${Object.keys(TARGETS).join('|')}> [--all] [--dir <path>] [--dry-run]
+  ai-dev-team mcp add <server...> [--target <t>] [--all] [--command <cmd>] [--args <a,b>] [--env <K=V>] [--url <url>] [--dir <path>] [--force] [--dry-run]
+  ai-dev-team mcp remove <server...> [--target <t>] [--all] [--dir <path>] [--dry-run]
+  ai-dev-team mcp list [--presets] [--dir <path>]
   ai-dev-team event --work-id <id> --agent <role> --event <type> [--stage <s>] [--message <text>]
                     [--verdict <v>] [--loop <n>] [--to <role>] [--dir <path>]
   ai-dev-team status [--work-id <id>] [--dir <path>]
@@ -30,8 +38,15 @@ Init / Install / Uninstall options:
       --stack         Technology stack for .ai-team/constitution.md (init only)
       --mcp           MCP servers / integrations (e.g. github, jira, postgres) (init only)
       --requirements  Additional project requirements / constraints (init only)
-  -f, --force         Overwrite existing generated files (init/install only)
+  -f, --force         Overwrite existing generated files (init/install/mcp add)
       --dry-run       Show what would change without writing
+
+MCP options:
+      --presets       List all built-in MCP server presets (${Object.keys(MCP_PRESETS).join(', ')})
+      --command       Executable for a custom stdio MCP server
+      --args          Arguments for --command (comma-separated or repeatable)
+      --env           Environment variables for MCP server in KEY=VALUE format (repeatable)
+      --url           Endpoint URL for a custom remote HTTP MCP server
 
 Event options (append one status event to .ai-team/<work-id>/events.jsonl):
       --agent    ${AGENTS.join(' | ')}
@@ -57,6 +72,11 @@ const OPTIONS = {
   stack: { type: 'string' },
   mcp: { type: 'string' },
   requirements: { type: 'string' },
+  command: { type: 'string' },
+  args: { type: 'string', multiple: true },
+  env: { type: 'string', multiple: true },
+  url: { type: 'string' },
+  presets: { type: 'boolean', default: false },
   dir: { type: 'string', short: 'd', default: '.' },
   force: { type: 'boolean', short: 'f', default: false },
   'dry-run': { type: 'boolean', default: false },
@@ -74,7 +94,7 @@ const OPTIONS = {
   demo: { type: 'boolean', default: false },
 };
 
-const COMMANDS = ['init', 'install', 'uninstall', 'event', 'status', 'dashboard'];
+const COMMANDS = ['init', 'install', 'uninstall', 'mcp', 'event', 'status', 'dashboard'];
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: OPTIONS });
@@ -87,6 +107,7 @@ async function main() {
   if (command === 'init') return runInit(values);
   if (command === 'install') return runInstall(values);
   if (command === 'uninstall') return runUninstall(values);
+  if (command === 'mcp') return runMcp(values, positionals.slice(1));
   if (command === 'event') return runEvent(values);
   if (command === 'status') return runStatus(values);
   return runDashboard(values);
@@ -169,7 +190,7 @@ async function runInit(values) {
     }
   }
 
-  const { targets: installedTargets, results, workspace } = await initProject({
+  const { targets: installedTargets, results, workspace, mcp } = await initProject({
     targets,
     dir: values.dir,
     force: values.force,
@@ -187,6 +208,106 @@ async function runInit(values) {
   for (const p of workspace.written) console.log(`  + ${p}`);
   for (const p of workspace.updated) console.log(`  ~ ${p}`);
   for (const p of workspace.skipped) console.log(`  = ${p}`);
+  if (mcp?.addedServers?.length) {
+    console.log(`\n[mcp] configured: ${mcp.addedServers.join(', ')}`);
+  }
+  if (mcp?.unknown?.length) {
+    console.log(
+      `[mcp] noted in constitution only (no preset): ${mcp.unknown.join(', ')} (use "ai-dev-team mcp add <name> --command/--url" to configure)`,
+    );
+  }
+}
+
+async function runMcp(values, args) {
+  const subcommand = args[0] ?? (values.presets ? 'list' : undefined);
+  const serverArgs = args.slice(1);
+
+  if (!subcommand || !['add', 'remove', 'list'].includes(subcommand)) {
+    console.log(USAGE);
+    process.exit(1);
+  }
+
+  const targets = values.all
+    ? Object.keys(TARGETS)
+    : values.target?.length
+      ? values.target
+      : await detectTargets(values.dir);
+
+  if (subcommand === 'list') {
+    const info = await listMcpServers({ dir: values.dir, targets });
+    if (values.presets) {
+      console.log('Built-in MCP server presets:');
+      for (const [name, p] of Object.entries(info.presets)) {
+        console.log(`  ${name.padEnd(20)} ${p.description}`);
+      }
+      return;
+    }
+    for (const [target, data] of Object.entries(info.configured)) {
+      const names = Object.keys(data.servers);
+      console.log(`\n[${target}] ${data.path}${data.exists ? '' : ' (not created)'}`);
+      if (names.length === 0) {
+        console.log('  (no MCP servers configured)');
+      } else {
+        for (const n of names) {
+          const entry = data.servers[n];
+          const detail = entry.url ? entry.url : [entry.command, ...(entry.args ?? [])].join(' ');
+          console.log(`  - ${n}: ${detail}`);
+        }
+      }
+    }
+    console.log(`\nAvailable presets (${Object.keys(info.presets).length}): ${Object.keys(info.presets).join(', ')}`);
+    return;
+  }
+
+  if (subcommand === 'add') {
+    if (serverArgs.length === 0) {
+      throw new Error('Specify at least one MCP server to add (e.g. "ai-dev-team mcp add github postgres")');
+    }
+    const hasCustom = Boolean(values.command || values.url);
+    if (hasCustom && serverArgs.length > 1) {
+      throw new Error('Custom --command / --url options can only be used when adding a single MCP server');
+    }
+    const custom = hasCustom
+      ? {
+          command: values.command,
+          args: parseCliArgs(values.args),
+          env: parseCliEnv(values.env),
+          url: values.url,
+        }
+      : null;
+
+    const report = await addMcpServers({
+      targets,
+      servers: serverArgs,
+      custom,
+      dir: values.dir,
+      force: values.force,
+      dryRun: values['dry-run'],
+      updateConstitution: true,
+    });
+    console.log(`[mcp add]${values['dry-run'] ? ' (dry run)' : ''}`);
+    for (const p of report.written) console.log(`  + ${p}`);
+    for (const p of report.updated) console.log(`  ~ ${p}`);
+    for (const p of report.skipped) console.log(`  = ${p} (unchanged, use --force to overwrite)`);
+    return;
+  }
+
+  if (subcommand === 'remove') {
+    if (serverArgs.length === 0) {
+      throw new Error('Specify at least one MCP server to remove (e.g. "ai-dev-team mcp remove github")');
+    }
+    const report = await removeMcpServers({
+      targets,
+      servers: serverArgs,
+      dir: values.dir,
+      dryRun: values['dry-run'],
+      updateConstitution: true,
+    });
+    console.log(`[mcp remove]${values['dry-run'] ? ' (dry run)' : ''}`);
+    for (const p of report.removed) console.log(`  - ${p}`);
+    for (const p of report.updated) console.log(`  ~ ${p}`);
+    for (const p of report.skipped) console.log(`  = ${p}`);
+  }
 }
 
 async function runInstall(values) {

@@ -2,6 +2,23 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { loadPack, DEFAULT_CORE_DIR } from './pack.mjs';
 import { TARGETS } from './targets.mjs';
+import {
+  addMcpServers,
+  removeMcpServers,
+  listMcpServers,
+  MCP_PRESETS,
+  TARGET_MCP_PATHS,
+  parseMcpServerList,
+} from './mcp.mjs';
+
+export {
+  addMcpServers,
+  removeMcpServers,
+  listMcpServers,
+  MCP_PRESETS,
+  TARGET_MCP_PATHS,
+  parseMcpServerList,
+};
 
 export const BLOCK_START = '<!-- ai-dev-team:start -->';
 export const BLOCK_END = '<!-- ai-dev-team:end -->';
@@ -202,6 +219,7 @@ export async function initProject({
     workspace.skipped.push('.ai-team/.gitkeep');
   }
 
+  let mcp = { written: [], updated: [], skipped: [], addedServers: [], unknown: [], byTarget: {} };
   if (projectInfo) {
     const constitutionAbs = resolve(root, '.ai-team/constitution.md');
     const existingConstitution = await readOptional(constitutionAbs);
@@ -214,6 +232,20 @@ export async function initProject({
       if (!dryRun) await writeFileEnsured(constitutionAbs, content);
     } else {
       workspace.skipped.push('.ai-team/constitution.md');
+    }
+
+    if (projectInfo.mcpServers) {
+      mcp = await addMcpServers({
+        targets: resolvedTargets,
+        servers: projectInfo.mcpServers,
+        dir,
+        force,
+        dryRun,
+        allowUnknownPresets: true,
+      });
+      workspace.written.push(...mcp.written);
+      workspace.updated.push(...mcp.updated);
+      workspace.skipped.push(...mcp.skipped);
     }
   }
 
@@ -232,7 +264,7 @@ export async function initProject({
     if (!dryRun) await writeFileEnsured(gitignoreAbs, `${prefix}${GITIGNORE_ENTRY}\n`);
   }
 
-  return { targets: resolvedTargets, results, workspace };
+  return { targets: resolvedTargets, results, workspace, mcp };
 }
 
 /**

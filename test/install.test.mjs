@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   install,
   uninstall,
@@ -11,6 +14,12 @@ import {
   detectProjectInfo,
   parseTargetSelection,
   renderConstitution,
+  addMcpServers,
+  removeMcpServers,
+  listMcpServers,
+  MCP_PRESETS,
+  TARGET_MCP_PATHS,
+  parseMcpServerList,
   TARGET_DIRS,
   upsertBlock,
   removeBlock,
@@ -18,6 +27,9 @@ import {
 } from '../src/install.mjs';
 import { loadPack } from '../src/pack.mjs';
 import { parseFrontmatter, serializeFrontmatter } from '../src/frontmatter.mjs';
+
+const run = promisify(execFile);
+const CLI = fileURLToPath(new URL('../bin/cli.mjs', import.meta.url));
 
 const ROLES = ['architect', 'implementer', 'reviewer', 'security', 'qa'];
 const SKILLS = ['system-design', 'implement-task', 'code-review', 'security-assessment', 'test-verification'];
@@ -305,6 +317,15 @@ test('detectProjectInfo and initProject scaffold .ai-team/constitution.md with p
     };
     const res = await initProject({ targets: ['antigravity'], dir, projectInfo: customInfo });
     assert.ok(res.workspace.written.includes('.ai-team/constitution.md'));
+    assert.ok(res.workspace.written.includes('.agents/mcp_config.json'));
+    assert.deepEqual(res.mcp.addedServers, ['github', 'jira', 'postgres', 'sentry']);
+
+    const mcpConfig = JSON.parse(await readFile(join(dir, '.agents/mcp_config.json'), 'utf8'));
+    assert.ok(mcpConfig.mcpServers.github);
+    assert.ok(mcpConfig.mcpServers.jira);
+    assert.ok(mcpConfig.mcpServers.postgres);
+    assert.ok(mcpConfig.mcpServers.sentry);
+    assert.equal(mcpConfig.mcpServers.github.env.GITHUB_PERSONAL_ACCESS_TOKEN, '${GITHUB_PERSONAL_ACCESS_TOKEN}');
 
     const constitution = await readFile(join(dir, '.ai-team/constitution.md'), 'utf8');
     assert.ok(constitution.includes('billing-service — Stripe & invoice API'));
@@ -313,9 +334,229 @@ test('detectProjectInfo and initProject scaffold .ai-team/constitution.md with p
     assert.ok(constitution.includes('- idempotent webhook handlers'));
     assert.ok(constitution.includes('Build: `npm run build`'));
 
-    // Second run without force skips existing constitution.md
+    // Second run without force skips existing constitution.md and mcp_config.json
     const second = await initProject({ targets: ['antigravity'], dir, projectInfo: customInfo });
     assert.ok(second.workspace.skipped.includes('.ai-team/constitution.md'));
+    assert.ok(second.workspace.skipped.includes('.agents/mcp_config.json'));
+  });
+});
+
+test('initProject writes target-specific MCP config files and tolerates non-preset names in constitution', async () => {
+  await withTempDir(async (dir) => {
+    const res = await initProject({
+      targets: ['antigravity', 'claude-code', 'cursor'],
+      dir,
+      projectInfo: {
+        project: 'demo',
+        techStack: 'Node.js',
+        mcpServers: 'github, playwright, custom-internal-erp',
+        requirements: 'None',
+        buildCmd: 'none',
+        lintCmd: 'none',
+        testCmd: 'npm test',
+      },
+    });
+
+    assert.deepEqual(res.mcp.addedServers, ['github', 'playwright']);
+    assert.deepEqual(res.mcp.unknown, ['custom-internal-erp']);
+
+    for (const target of ['antigravity', 'claude-code', 'cursor']) {
+      const mcpPath = join(dir, TARGET_MCP_PATHS[target]);
+      assert.equal(await exists(mcpPath), true, `missing ${TARGET_MCP_PATHS[target]}`);
+      const parsed = JSON.parse(await readFile(mcpPath, 'utf8'));
+      assert.deepEqual(Object.keys(parsed.mcpServers), ['github', 'playwright']);
+    }
+
+    const constitution = await readFile(join(dir, '.ai-team/constitution.md'), 'utf8');
+    assert.ok(constitution.includes('github, playwright, custom-internal-erp'));
+  });
+});
+
+test('addMcpServers merges non-destructively, respects --force, and syncs .ai-team/constitution.md', async () => {
+  await withTempDir(async (dir) => {
+    // Seed an existing .mcp.json with a user-customized server and extra top-level key
+    await writeFile(
+      join(dir, '.mcp.json'),
+      JSON.stringify({
+        customRootKey: true,
+        mcpServers: {
+          github: { command: 'custom-gh-mcp', args: ['--custom'] },
+          existingServer: { command: 'node', args: ['server.js'] },
+        },
+      }),
+      'utf8',
+    );
+    await mkdir(join(dir, '.ai-team'), { recursive: true });
+    await writeFile(
+      join(dir, '.ai-team/constitution.md'),
+      renderConstitution({ project: 'app', mcpServers: 'github' }),
+      'utf8',
+    );
+
+    // Without force, existing "github" is preserved while "postgres" and "context7" are added
+    const first = await addMcpServers({
+      targets: ['claude-code'],
+      servers: ['github', 'postgres', 'context7'],
+      dir,
+      updateConstitution: true,
+    });
+    assert.deepEqual(first.byTarget['claude-code'].added, ['postgres', 'context7']);
+    assert.deepEqual(first.byTarget['claude-code'].skipped, ['github']);
+    assert.ok(first.updated.includes('.mcp.json'));
+    assert.ok(first.updated.includes('.ai-team/constitution.md'));
+
+    const afterFirst = JSON.parse(await readFile(join(dir, '.mcp.json'), 'utf8'));
+    assert.equal(afterFirst.customRootKey, true);
+    assert.equal(afterFirst.mcpServers.github.command, 'custom-gh-mcp');
+    assert.equal(afterFirst.mcpServers.existingServer.command, 'node');
+    assert.ok(afterFirst.mcpServers.postgres);
+    assert.ok(afterFirst.mcpServers.context7);
+
+    const updatedConstitution = await readFile(join(dir, '.ai-team/constitution.md'), 'utf8');
+    assert.ok(updatedConstitution.includes('- **MCP Servers & Integrations:** github, postgres, context7'));
+
+    // With force, "github" is overwritten with preset definition
+    const forced = await addMcpServers({
+      targets: ['claude-code'],
+      servers: ['github'],
+      dir,
+      force: true,
+    });
+    assert.deepEqual(forced.byTarget['claude-code'].updated, ['github']);
+    const afterForce = JSON.parse(await readFile(join(dir, '.mcp.json'), 'utf8'));
+    assert.equal(afterForce.mcpServers.github.command, 'npx');
+  });
+});
+
+test('addMcpServers supports custom stdio and HTTP MCP servers and validates inputs', async () => {
+  await withTempDir(async (dir) => {
+    await addMcpServers({
+      targets: ['cursor'],
+      servers: ['my-stdio-mcp'],
+      custom: {
+        command: 'node',
+        args: ['./scripts/mcp.js', '--readonly'],
+        env: { API_KEY: '${MY_API_KEY}' },
+      },
+      dir,
+    });
+    await addMcpServers({
+      targets: ['cursor'],
+      servers: ['my-http-mcp'],
+      custom: { url: 'https://mcp.example.com/mcp' },
+      dir,
+    });
+
+    const cursorMcp = JSON.parse(await readFile(join(dir, '.cursor/mcp.json'), 'utf8'));
+    assert.deepEqual(cursorMcp.mcpServers['my-stdio-mcp'], {
+      command: 'node',
+      args: ['./scripts/mcp.js', '--readonly'],
+      env: { API_KEY: '${MY_API_KEY}' },
+    });
+    assert.deepEqual(cursorMcp.mcpServers['my-http-mcp'], {
+      url: 'https://mcp.example.com/mcp',
+    });
+
+    // Validation errors
+    await assert.rejects(
+      addMcpServers({ targets: ['cursor'], servers: ['unknown-preset'], dir }),
+      /Unknown MCP server preset "unknown-preset"/,
+    );
+    await assert.rejects(
+      addMcpServers({ targets: ['cursor'], servers: ['../bad'], custom: { command: 'node' }, dir }),
+      /Invalid MCP server name/,
+    );
+    await assert.rejects(
+      addMcpServers({
+        targets: ['cursor'],
+        servers: ['both'],
+        custom: { command: 'node', url: 'https://mcp.example.com' },
+        dir,
+      }),
+      /cannot specify both --command and --url/,
+    );
+    await assert.rejects(
+      addMcpServers({
+        targets: ['cursor'],
+        servers: ['bad-url'],
+        custom: { url: 'ftp://mcp.example.com' },
+        dir,
+      }),
+      /Protocol must be http: or https:/,
+    );
+  });
+});
+
+test('removeMcpServers removes selected servers, cleans up empty config file, and updates constitution', async () => {
+  await withTempDir(async (dir) => {
+    await initProject({
+      targets: ['claude-code'],
+      dir,
+      projectInfo: {
+        project: 'demo',
+        techStack: 'Node.js',
+        mcpServers: 'github, redis',
+        requirements: 'None',
+        buildCmd: 'none',
+        lintCmd: 'none',
+        testCmd: 'npm test',
+      },
+    });
+
+    const partial = await removeMcpServers({
+      targets: ['claude-code'],
+      servers: ['github'],
+      dir,
+      updateConstitution: true,
+    });
+    assert.ok(partial.updated.includes('.mcp.json'));
+    assert.ok(partial.updated.includes('.ai-team/constitution.md'));
+
+    const remaining = JSON.parse(await readFile(join(dir, '.mcp.json'), 'utf8'));
+    assert.deepEqual(Object.keys(remaining.mcpServers), ['redis']);
+    const constAfterPartial = await readFile(join(dir, '.ai-team/constitution.md'), 'utf8');
+    assert.ok(constAfterPartial.includes('- **MCP Servers & Integrations:** redis'));
+
+    // Removing the last server removes the empty .mcp.json file and sets constitution MCP to "none"
+    const full = await removeMcpServers({
+      targets: ['claude-code'],
+      servers: ['redis'],
+      dir,
+      updateConstitution: true,
+    });
+    assert.ok(full.removed.includes('.mcp.json'));
+    assert.equal(await exists(join(dir, '.mcp.json')), false);
+    const constAfterFull = await readFile(join(dir, '.ai-team/constitution.md'), 'utf8');
+    assert.ok(constAfterFull.includes('- **MCP Servers & Integrations:** none'));
+  });
+});
+
+test('CLI mcp subcommand supports add, list, --presets, and remove', async () => {
+  await withTempDir(async (dir) => {
+    await mkdir(join(dir, '.claude'));
+
+    const { stdout: presetsOut } = await run('node', [CLI, 'mcp', 'list', '--presets', '--dir', dir]);
+    assert.match(presetsOut, /Built-in MCP server presets:/);
+    for (const preset of Object.keys(MCP_PRESETS)) {
+      assert.ok(presetsOut.includes(preset), `presets output missing ${preset}`);
+    }
+
+    const { stdout: addOut } = await run('node', [
+      CLI, 'mcp', 'add', 'github', 'sqlite', 'sequential-thinking', '--dir', dir,
+    ]);
+    assert.match(addOut, /\+ \.mcp\.json/);
+
+    const { stdout: listOut } = await run('node', [CLI, 'mcp', 'list', '--dir', dir]);
+    assert.match(listOut, /\[claude-code\] \.mcp\.json/);
+    assert.match(listOut, /- github:/);
+    assert.match(listOut, /- sqlite:/);
+    assert.match(listOut, /- sequential-thinking:/);
+
+    const { stdout: removeOut } = await run('node', [CLI, 'mcp', 'remove', 'sqlite', '--dir', dir]);
+    assert.match(removeOut, /~ \.mcp\.json/);
+
+    const info = await listMcpServers({ dir, targets: ['claude-code'] });
+    assert.deepEqual(Object.keys(info.configured['claude-code'].servers), ['github', 'sequential-thinking']);
   });
 });
 
