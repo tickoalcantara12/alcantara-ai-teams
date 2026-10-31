@@ -155,12 +155,22 @@ function claudeCode(pack) {
 function cursor(pack) {
   const base = '.cursor/ai-team';
   const footer = contextFooter(base);
+  const roleSkills = new Set(pack.roles.map((r) => r.data.skill));
+  const standaloneSkills = pack.skills.filter((s) => !roleSkills.has(s.data.name));
   return [
     ...pack.roles.map((r) => ({
       path: `.cursor/rules/ai-team-${r.data.name}.mdc`,
       content: serializeFrontmatter(
         { description: r.data.description, alwaysApply: false },
         `${r.body}\n\n---\n\n${r.skill.body}${footer}`,
+      ),
+      mode: 'file',
+    })),
+    ...standaloneSkills.map((s) => ({
+      path: `.cursor/rules/ai-team-${s.data.name}.mdc`,
+      content: serializeFrontmatter(
+        { description: s.data.description, alwaysApply: false },
+        `${s.body}${footer}`,
       ),
       mode: 'file',
     })),

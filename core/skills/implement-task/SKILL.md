@@ -12,7 +12,7 @@ description: Step-by-step procedure for the Principal Software Engineer to imple
 5. **Green (Simplicity & Surgical Changes)** – Implement the minimum code that makes the tests pass. Every changed line must trace to a requirement ID. Validate inputs, handle expected errors explicitly, no secrets in code, and do not reformat or "improve" adjacent code or comments.
 6. **Refactor** – Clean up with tests green. Remove only imports, variables, or functions made unused by your own changes (mention pre-existing dead code instead of deleting it). Add unit tests for any edge cases found along the way.
 7. **Verify** – Run the project's format/lint, type check, build and the full relevant tests. Fix failures you introduced. Record exact commands and outcomes.
-8. **Self-review** – Read your own diff: verify every changed line traces to the task, no single-use abstractions or speculative code ("if 200 lines could be 50, simplify"), no debug prints, and full constitution compliance.
+8. **Self-review** – Read your own diff: verify every changed line traces to the task, no single-use abstractions or speculative code ("if 200 lines could be 50, simplify"), no debug prints, full `anti-slop` compliance (UI states, accessibility, specific copy, and clean why-only code comments), and full constitution compliance.
 9. **Notes** – Append to `implementation-notes.md`: task IDs completed (tick them in `tasks.md`), requirements satisfied, files changed, decisions, commands run + real results, finding IDs resolved.
 
 ## Parallel tasks

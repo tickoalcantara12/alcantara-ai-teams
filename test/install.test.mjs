@@ -32,7 +32,7 @@ const run = promisify(execFile);
 const CLI = fileURLToPath(new URL('../bin/cli.mjs', import.meta.url));
 
 const ROLES = ['architect', 'implementer', 'reviewer', 'security', 'qa'];
-const SKILLS = ['system-design', 'implement-task', 'code-review', 'security-assessment', 'test-verification'];
+const SKILLS = ['system-design', 'implement-task', 'code-review', 'security-assessment', 'test-verification', 'anti-slop'];
 const COMMANDS = ['new-feature', 'bug-fix', 'review', 'fix-review', 'e2e', 'review-pr', 'pr-feedback', 'spec'];
 const SDD_TEMPLATES = ['spec.md', 'tasks.md', 'constitution.md', 'analysis.md', 'design.md'];
 
@@ -154,10 +154,13 @@ test('claude-code install writes subagents with tools, skills and commands', asy
   });
 });
 
-test('cursor install writes role rules, core rule and commands', async () => {
+test('cursor install writes role rules, standalone skill rules, core rule and commands', async () => {
   await withTempDir(async (dir) => {
     await install({ target: 'cursor', dir });
     for (const r of ROLES) assert.ok(await exists(join(dir, `.cursor/rules/ai-team-${r}.mdc`)));
+    assert.ok(await exists(join(dir, '.cursor/rules/ai-team-anti-slop.mdc')));
+    const antiSlop = await readFile(join(dir, '.cursor/rules/ai-team-anti-slop.mdc'), 'utf8');
+    assert.ok(antiSlop.includes('miqdadbadjuber/anti-slop'));
     const core = parseFrontmatter(await readFile(join(dir, '.cursor/rules/ai-team-core.mdc'), 'utf8'));
     assert.equal(core.data.alwaysApply, true);
     for (const c of COMMANDS) assert.ok(await exists(join(dir, `.cursor/commands/${c}.md`)));

@@ -12,6 +12,7 @@ description: Step-by-step procedure for the Principal Engineering Team Lead to r
    - Spec conformance & Surgical diff: every changed line traces to a requirement ID; no gold-plating, no orthogonal edits to adjacent code/comments/formatting, and no newly orphaned imports/variables left behind.
    - Design conformance: matches design/ADRs; layering and separation of concerns.
    - Simplicity & Maintainability: minimum code that solves the problem ("if 200 lines could be 50, simplify"), no single-use abstractions or speculative configurability, clear naming, no duplication or dead code.
+   - Anti-Slop (apply `anti-slop` skill): for UI/frontend diffs, check Hard Gates (no dead controls, `empty`/`loading`/`error` states present, WCAG AA contrast, keyboard & semantic accessibility, mobile responsiveness, no fabricated stats/claims or AI copy buzzwords); for all diffs, flag AI-slop code comments (decorative dividers, obvious restatements, `// Step 1` narration, vague TODOs, emoji comments).
    - Performance: unnecessary queries/loops, N+1, missing indexes, unbounded memory.
    - API/data: backward compatibility, validation, status codes, migration safety.
    - Tests: meaningful assertions, coverage of new logic, no weakened tests.
